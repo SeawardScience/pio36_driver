@@ -8,15 +8,21 @@ set(ROS_DEPENDS
     ament_cmake
     rclcpp
     std_msgs
-    template_pkg_interfaces
   )
 
 set(EXTERNAL_DEPENDS
 
   )
 
-set(EXTERNAL_DEPENDS_LIB
+# Find the libmodbus package
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBMODBUS REQUIRED libmodbus)
 
+# Include directories for libmodbus
+include_directories(${LIBMODBUS_INCLUDE_DIRS})
+
+set(EXTERNAL_DEPENDS_LIB
+  ${LIBMODBUS_LIBRARIES}
   )
 
 
@@ -77,7 +83,8 @@ foreach(NODE_FILE ${NODES})
   message("  - " ${NODE_NAME})
   list(APPEND EXECUTABLES ${NODE_NAME})
   add_executable(${NODE_NAME} ${NODE_FILE} ${HDRS} ${SRCS})
-  ament_target_dependencies(${NODE_NAME} ${ROS_DEPENDS} ${EXTERNAL_DEPENDS_LIB})
+  ament_target_dependencies(${NODE_NAME} ${ROS_DEPENDS} )
+  target_link_libraries(${NODE_NAME} ${EXTERNAL_DEPENDS_LIB})
   target_include_directories(${NODE_NAME} PRIVATE "include/${PROJECT_NAME}/")
 endforeach(NODE_FILE)
 
