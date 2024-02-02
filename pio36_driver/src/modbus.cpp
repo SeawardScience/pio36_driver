@@ -16,7 +16,7 @@ Modbus::~Modbus(){
 }
 
 void Modbus::connect_tcp(const char *ip_address, int port){
-  mb_ =modbus_new_tcp("192.168.52.209", 502);
+  mb_ =modbus_new_tcp(ip_address, port);
   if (modbus_connect(mb_) == -1) {
     throw std::runtime_error("Connection failed: " + std::string(modbus_strerror(errno)));
   }

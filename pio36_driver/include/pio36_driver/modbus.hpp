@@ -25,7 +25,7 @@ public:
 
   static const int REGISTER_MAX_WORDS = 128;
   typedef std::shared_ptr<Modbus> Ptr;
-//private:
+private:
   uint16_t tab_reg_[REGISTER_MAX_WORDS];
   modbus_t *mb_;
 };

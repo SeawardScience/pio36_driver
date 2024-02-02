@@ -4,6 +4,7 @@
 #include <chrono>
 #include <thread>
 #include "modbus.hpp"
+#include "blocks/primatives.hpp"
 
 
 union FloatToUint16 {
@@ -27,10 +28,15 @@ int main(void) {
   // modbus_set_float_abcd(1.0,buffer);
 
   FloatToUint16  u;
-  u.value = 0.0;
+  u.value = 1.0;
 
   buffer[0] = u.parts[1];
   buffer[1] = u.parts[0];
+  union{
+    pio36_driver::primitives::BE_f32 val;
+    uint16_t parts[2];
+  } pwm;
+  pwm.val.set(1.0);
 
   mb.write_registers(117-1,2,buffer);
 
