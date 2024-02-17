@@ -9,7 +9,6 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend> acoustic_msgs </depend>
   <depend> libmodbus-dev </depend>
 
   <test_depend>ament_lint_auto</test_depend>
