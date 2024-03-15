@@ -2,6 +2,7 @@
 
 
 #include "package_defs.hpp"
+#include "blocks/block.hpp"
 
 #include <modbus.h>
 #include <cerrno>
@@ -19,7 +20,9 @@ public:
   ~Modbus();
   void connect_tcp(const char *ip_address, int port);
   void read_input_registers(int addr, int nb);
+  void read_input_registers(blocks::Block & block);
   void write_registers(int addr, int nb, const uint16_t *src);
+  void write_registers(blocks::Block & block);
   void print_buffer();
   uint16_t * buffer();
 

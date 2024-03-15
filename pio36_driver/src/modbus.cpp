@@ -28,8 +28,22 @@ void Modbus::read_input_registers(int addr, int nb){
   }
 }
 
+void Modbus::read_input_registers(blocks::Block & block)
+{
+  if ( modbus_read_input_registers(mb_, block.modbusAddress(), block.size(), block.buffer()) == -1){
+    throw std::runtime_error("Failed to read input registers: " + std::string(modbus_strerror(errno)));
+  }
+}
+
 void Modbus::write_registers(int addr, int nb, const uint16_t *src){
   if ( modbus_write_registers(mb_, addr, nb, src) == -1){
+    throw std::runtime_error("Failed to write registers: " + std::string(modbus_strerror(errno)));
+  }
+}
+
+void Modbus::write_registers(blocks::Block & block)
+{
+  if ( modbus_write_registers(mb_, block.modbusAddress(), block.size(), block.buffer()) == -1){
     throw std::runtime_error("Failed to write registers: " + std::string(modbus_strerror(errno)));
   }
 }

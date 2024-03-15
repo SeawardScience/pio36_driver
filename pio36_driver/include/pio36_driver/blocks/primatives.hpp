@@ -1,6 +1,7 @@
 #pragma once
 #include "../package_defs.hpp"
 #include <cstdint>
+#include <stddef.h>
 NS_HEAD
 
 
@@ -12,6 +13,8 @@ typedef signed short   s16;
 typedef signed int     s32;
 typedef float          f32;
 typedef double         f64;
+typedef uint16_t       word;
+typedef word*          WordBuffer;
 
 template <typename T>
 T revPrimitive(const T u)
@@ -69,6 +72,9 @@ struct BigEndianPrimative{
 
   operator float() const {return get(); }
   operator double() const {return get(); }
+
+  template <typename T>
+  BigEndianPrimative&operator=(T other){this->set(other);}
 };
 
 typedef BigEndianPrimative<u32>     BE_u32;
