@@ -45,18 +45,31 @@ void Pio36Node::writeBuffer(){
   RCLCPP_DEBUG(this->get_logger(), "pwm_duty: %s", cmd_blocks_.pwm_duty.hexString().c_str());
 
   if(connected_){
-    mb_.write_registers(cmd_blocks_.pwm_duty);
+    try{
+      mb_.write_registers(cmd_blocks_.pwm_duty);
+    }catch(std::runtime_error err){
+      std::string error_msg = err.what();
+      RCLCPP_WARN(this->get_logger(),"modbus write failed: ", error_msg.c_str());
+    }
   }
 }
 
 void Pio36Node::poll(){
   if(connected_){
-    mb_.read_input_registers(poll_blocks_.pwm_duty);
+    try{
+      mb_.read_input_registers(poll_blocks_.pwm_duty);
+    }catch(std::runtime_error err){
+        std::string error_msg = err.what();
+        RCLCPP_WARN(this->get_logger(),"modbus read failed: ", error_msg.c_str());
+      }
   }
 }
 
 void Pio36Node::connect()
 {
+  if(connected_){
+    return;
+  }
   try{
     if(params_.connection.type == "tcp"){
       RCLCPP_INFO_ONCE(this->get_logger(),"Connecting to %s:%i",params_.connection.ip.c_str(), params_.connection.network_port);
