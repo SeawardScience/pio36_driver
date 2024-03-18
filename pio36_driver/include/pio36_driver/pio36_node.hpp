@@ -43,6 +43,7 @@ public:
       std::string valve_pack_cmd = "cmd/valve_pack";
       std::string valve_pack_response = "resp/valve_pack";
     }topics;
+    float deadband = 0.01;
 
     void declare(rclcpp::Node * node);
     void update(rclcpp::Node * node);

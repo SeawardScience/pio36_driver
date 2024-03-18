@@ -51,7 +51,12 @@ struct BigEndianPrimative{
    * \return a machine endian version fo the variable
    */
   PrimT get() const{
-    //return revPrimitive(raw);
+    prim_union output = raw;
+    auto words = sizeof(PrimT)/2;
+    for(int i = 0; i < words; i++){
+      output.words[i] = raw.words[words - 1 - i];
+    }
+    return output.u;
   }
   void set(PrimT val){
     prim_union input;

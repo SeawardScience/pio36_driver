@@ -31,7 +31,18 @@ Pio36Node::Pio36Node()
 }
 
 void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve){
-  cmd_blocks_.pwm_duty.dutyChan(valve.valve_id) = valve.set_point * 100.0;
+  auto value = valve.set_point * 100.0;
+  if (value > 100.0){
+    value = 100.0;
+  }
+  if (value < params_.deadband){
+    value = 0.0;
+    RCLCPP_WARN_ONCE(this->get_logger(),"This board does not support negative valve commands, received a negative value for thrust on channel %i", valve.valve_id);
+  }
+  if (value < 0.001){
+    value = 0.0;
+  }
+  cmd_blocks_.pwm_duty.dutyChan(valve.valve_id) = value;
 }
 
 void Pio36Node::valveCallback(const hydraulic_interfaces::msg::ValveStamped::SharedPtr msg) {
@@ -70,9 +81,9 @@ void Pio36Node::poll(){
 }
 
 void Pio36Node::publishResponses(){
-  for(size_t i = 0; i < blocks::PwmDuty::NUM_PWM_CHANNELS; i++){
-    pubs_.valve_state.msg_buff.valves[i].set_point = double(poll_blocks_.pwm_duty.dutyChan(i)) / 100.0;
-    pubs_.valve_state.msg_buff.valves[i].valve_id = i;
+  for(size_t i = 1; i <= blocks::PwmDuty::NUM_PWM_CHANNELS; i++){
+    pubs_.valve_state.msg_buff.valves[i-1].set_point = double(poll_blocks_.pwm_duty.dutyChan(i)) / 100.0;
+    pubs_.valve_state.msg_buff.valves[i-1].valve_id = i;
   }
   pubs_.valve_state.publish();
 }
@@ -117,6 +128,8 @@ void Pio36Node::Params::declare(rclcpp::Node *node)
   node->declare_parameter("topics.valve_cmd", topics.valve_cmd);
   node->declare_parameter("topics.valve_pack_cmd", topics.valve_pack_cmd);
   node->declare_parameter("topics.valve_pack_response", topics.valve_pack_response);
+
+  node->declare_parameter("deadband", deadband);
 }
 
 void Pio36Node::Params::update(rclcpp::Node *node)
@@ -135,6 +148,8 @@ void Pio36Node::Params::update(rclcpp::Node *node)
   node->get_parameter("topics.valve_cmd", topics.valve_cmd);
   node->get_parameter("topics.valve_pack_cmd", topics.valve_pack_cmd);
   node->get_parameter("topics.valve_pack_response", topics.valve_pack_response);
+
+  node->get_parameter("deadband", deadband);
 }
 
 NS_FOOT
