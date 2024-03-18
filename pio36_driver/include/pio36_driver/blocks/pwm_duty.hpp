@@ -7,8 +7,9 @@ BLOCKS_NS_HEAD
 
 class PwmDuty : public Block{
 
-protected:
+public:
   static const size_t NUM_PWM_CHANNELS = 16;
+protected:
   struct PwmDuty_T{
     primitives::BE_f32 duty[NUM_PWM_CHANNELS];
   };

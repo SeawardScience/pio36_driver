@@ -12,6 +12,18 @@
 
 NS_HEAD  // macro for consistantly defining our namespace for the package
 
+template<typename msg_T>
+struct BufferPub{
+  void setup(rclcpp::Node * node_ptr, std::string topic){
+    pub = node_ptr->create_publisher<msg_T>(topic, 10);
+  }
+  typename rclcpp::Publisher<msg_T>::SharedPtr pub;
+  msg_T msg_buff;
+  void publish(){
+    pub->publish(msg_buff);
+  }
+};
+
 class Pio36Node : public rclcpp::Node
 {
 public:
@@ -39,9 +51,11 @@ public:
   void valveCallback(const hydraulic_interfaces::msg::ValveStamped::SharedPtr msg);
   void valvePackCallback(const hydraulic_interfaces::msg::ValvePack::SharedPtr msg);
   void writeBuffer();
+
 protected:
   void valveHandler(hydraulic_interfaces::msg::Valve & valve);
   void poll();
+  void publishResponses();
   rclcpp::TimerBase::SharedPtr connect_timer_;
   void connect();
   bool connected_ = false;
@@ -57,6 +71,9 @@ protected:
     rclcpp::Subscription<hydraulic_interfaces::msg::ValveStamped>::SharedPtr valve_;
     rclcpp::Subscription<hydraulic_interfaces::msg::ValvePack>::SharedPtr valve_pack_;
   }subs_;
+  struct{
+    BufferPub<hydraulic_interfaces::msg::ValvePack> valve_state;
+  }pubs_;
   Modbus mb_;
   Params params_;
 };

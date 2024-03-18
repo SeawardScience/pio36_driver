@@ -25,6 +25,9 @@ Pio36Node::Pio36Node()
 
   write_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(params_.timers.write_ms), std::bind(&Pio36Node::writeBuffer, this));
+
+  pubs_.valve_state.setup(this, "~/valve_state");
+  pubs_.valve_state.msg_buff.valves.resize(blocks::PwmDuty::NUM_PWM_CHANNELS);
 }
 
 void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve){
@@ -58,11 +61,20 @@ void Pio36Node::poll(){
   if(connected_){
     try{
       mb_.read_input_registers(poll_blocks_.pwm_duty);
+      publishResponses();
     }catch(std::runtime_error err){
-        std::string error_msg = err.what();
-        RCLCPP_WARN(this->get_logger(),"modbus read failed: ", error_msg.c_str());
-      }
+      std::string error_msg = err.what();
+      RCLCPP_WARN(this->get_logger(),"modbus read failed: ", error_msg.c_str());
+    }
   }
+}
+
+void Pio36Node::publishResponses(){
+  for(size_t i = 0; i < blocks::PwmDuty::NUM_PWM_CHANNELS; i++){
+    pubs_.valve_state.msg_buff.valves[i].set_point = double(poll_blocks_.pwm_duty.dutyChan(i)) / 100.0;
+    pubs_.valve_state.msg_buff.valves[i].valve_id = i;
+  }
+  pubs_.valve_state.publish();
 }
 
 void Pio36Node::connect()
