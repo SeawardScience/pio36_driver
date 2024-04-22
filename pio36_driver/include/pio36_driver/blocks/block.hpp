@@ -23,7 +23,7 @@ public:
    */
   virtual size_t size() = 0;
   /*!
-   * \brief innovaAddress shoudl correspond to the address
+   * \brief innovaAddress should correspond to the address
    * listed in the innova manual.   This is generally indexed
    * from 1 where as the modbus address is indexed from 0
    * \return
