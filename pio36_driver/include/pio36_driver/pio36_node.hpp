@@ -1,6 +1,8 @@
 #pragma once  // Favor using this over the #ifndef, #define method
 
+#include "blocks/ip_config.hpp"
 #include "blocks/pwm_duty.hpp"
+#include "blocks/word_buffer.hpp"
 #include "package_defs.hpp"
 #include "modbus.hpp"
 
@@ -67,6 +69,9 @@ protected:
   }poll_blocks_;
   struct{
     blocks::PwmDuty pwm_duty;
+    blocks::IpConfig ip_config;
+    blocks::WordBuffer<113,1> eprom_flush;
+    blocks::WordBuffer<112,1> restart;
   }cmd_blocks_;
   struct{
     rclcpp::Subscription<hydraulic_interfaces::msg::ValveStamped>::SharedPtr valve_;

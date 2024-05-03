@@ -28,6 +28,10 @@ Pio36Node::Pio36Node()
 
   pubs_.valve_state.setup(this, "~/valve_state");
   pubs_.valve_state.msg_buff.valves.resize(blocks::PwmDuty::NUM_PWM_CHANNELS);
+
+  // initialize commmands with non zero values so they take effect
+  cmd_blocks_.eprom_flush.buffer()[0]=1;
+  cmd_blocks_.restart.buffer()[0]=1;
 }
 
 void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve){
