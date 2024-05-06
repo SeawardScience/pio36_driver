@@ -9,6 +9,7 @@ set(ROS_DEPENDS
     rclcpp
     std_msgs
     hydraulic_interfaces
+    io_interfaces
   )
 
 set(EXTERNAL_DEPENDS

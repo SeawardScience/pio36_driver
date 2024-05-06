@@ -15,7 +15,7 @@ Pio36Node::Pio36Node()
       std::chrono::milliseconds(params_.timers.poll_ms), std::bind(&Pio36Node::poll, this));
   connect_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(params_.timers.connect_ms), std::bind(&Pio36Node::connect, this));
-  connect();
+  //connect();
 
   subs_.valve_ = this->create_subscription<hydraulic_interfaces::msg::ValveStamped>(
       params_.topics.valve_cmd, 24, std::bind(&Pio36Node::valveCallback, this, _1));
@@ -29,6 +29,9 @@ Pio36Node::Pio36Node()
   pubs_.valve_state.setup(this, "~/valve_state");
   pubs_.valve_state.msg_buff.valves.resize(blocks::PwmDuty::NUM_PWM_CHANNELS);
 
+  pubs_.voltage.setup(this, "~/analog_input_voltage");
+  pubs_.voltage.msg_buff.analogs.resize(blocks::AnalogVoltageInput::NUM_CHANNELS);
+
   // initialize commmands with non zero values so they take effect
   cmd_blocks_.eprom_flush.buffer()[0]=1;
   cmd_blocks_.restart.buffer()[0]=1;
@@ -41,10 +44,9 @@ void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve){
   }
   if (value < params_.deadband){
     value = 0.0;
-    RCLCPP_WARN_ONCE(this->get_logger(),"This board does not support negative valve commands, received a negative value for thrust on channel %i", valve.valve_id);
   }
-  if (value < 0.001){
-    value = 0.0;
+  if (value < 0.0){
+    RCLCPP_WARN_ONCE(this->get_logger(),"This board does not support negative valve commands, received a negative value for thrust on channel %i", valve.valve_id);
   }
   cmd_blocks_.pwm_duty.dutyChan(valve.valve_id) = value;
 }
@@ -64,10 +66,11 @@ void Pio36Node::writeBuffer(){
 
   if(connected_){
     try{
-      mb_.write_registers(cmd_blocks_.pwm_duty);
+      mb_->write_registers(cmd_blocks_.pwm_duty);
     }catch(std::runtime_error err){
       std::string error_msg = err.what();
-      RCLCPP_WARN(this->get_logger(),"modbus write failed: ", error_msg.c_str());
+      RCLCPP_WARN(this->get_logger(),"modbus write failed: %s", error_msg.c_str());
+      connected_ = false;
     }
   }
 }
@@ -75,11 +78,14 @@ void Pio36Node::writeBuffer(){
 void Pio36Node::poll(){
   if(connected_){
     try{
-      mb_.read_input_registers(poll_blocks_.pwm_duty);
+      mb_->read_input_registers(poll_blocks_.pwm_duty);
+      mb_->read_input_registers(poll_blocks_.analog_inputs);
+
       publishResponses();
     }catch(std::runtime_error err){
       std::string error_msg = err.what();
-      RCLCPP_WARN(this->get_logger(),"modbus read failed: ", error_msg.c_str());
+      RCLCPP_WARN(this->get_logger(),"modbus read failed: %s", error_msg.c_str());
+      connected_ = false;
     }
   }
 }
@@ -90,29 +96,40 @@ void Pio36Node::publishResponses(){
     pubs_.valve_state.msg_buff.valves[i-1].valve_id = i;
   }
   pubs_.valve_state.publish();
+  for(size_t i = 1 ; i <= blocks::AnalogVoltageInput::NUM_CHANNELS ; i++){
+    pubs_.voltage.msg_buff.analogs[i-1].proportional_value = double(poll_blocks_.analog_inputs.chanel(i))/10.0;
+    pubs_.voltage.msg_buff.analogs[i-1].scale = 10.0;
+    pubs_.voltage.msg_buff.analogs[i-1].channel_id = i;
+  }
+  pubs_.voltage.publish();
 }
 
 void Pio36Node::connect()
 {
   if(connected_){
     return;
+    connected_warn = true;
   }
   try{
+    mb_.reset(new Modbus);
     if(params_.connection.type == "tcp"){
       RCLCPP_INFO_ONCE(this->get_logger(),"Connecting to %s:%i",params_.connection.ip.c_str(), params_.connection.network_port);
-      mb_.connect_tcp(params_.connection.ip.c_str(), params_.connection.network_port);
+      mb_->connect_tcp(params_.connection.ip.c_str(), params_.connection.network_port);
     }else{
       RCLCPP_ERROR(this->get_logger(),"Invalid connection type specified %s",params_.connection.type.c_str());
       return;
     }
-    RCLCPP_INFO(this->get_logger(),"Connectd to device");
-    connect_timer_->reset();
+    RCLCPP_INFO(this->get_logger(),"Connected to device");
+    //connect_timer_->reset();
     connected_ = true;
     RCLCPP_INFO(this->get_logger(),"Connected!");
   }catch(std::runtime_error err){
     connected_ = false;
     std::string error_msg = err.what();
-    RCLCPP_WARN_ONCE(this->get_logger(),"Unable to connect, will continue trying. Got Error\n ---%s", error_msg.c_str());
+    if(connected_warn){
+      RCLCPP_WARN(this->get_logger(),"Unable to connect to %s: %s",params_.connection.ip.c_str(), error_msg.c_str());
+    }
+    connected_warn = false;
   }
 }
 

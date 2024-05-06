@@ -3,6 +3,7 @@
 #include "blocks/ip_config.hpp"
 #include "blocks/pwm_duty.hpp"
 #include "blocks/word_buffer.hpp"
+#include "blocks/analog_input_scaled.hpp"
 #include "package_defs.hpp"
 #include "modbus.hpp"
 
@@ -10,6 +11,7 @@
 #include <std_msgs/msg/string.hpp>
 #include <hydraulic_interfaces/msg/valve_stamped.hpp>
 #include <hydraulic_interfaces/msg/valve_pack.hpp>
+#include <io_interfaces/msg/raw_analog_array.hpp>
 
 
 NS_HEAD  // macro for consistantly defining our namespace for the package
@@ -57,15 +59,18 @@ public:
 
 protected:
   void valveHandler(hydraulic_interfaces::msg::Valve & valve);
+  void extracted(size_t &i);
   void poll();
   void publishResponses();
   rclcpp::TimerBase::SharedPtr connect_timer_;
   void connect();
   bool connected_ = false;
+  bool connected_warn = true;
   rclcpp::TimerBase::SharedPtr poll_timer_; ///< Shared pointer to the timer
   rclcpp::TimerBase::SharedPtr write_timer_;
   struct{
     blocks::PwmDuty pwm_duty;
+    blocks::AnalogVoltageInput analog_inputs;
   }poll_blocks_;
   struct{
     blocks::PwmDuty pwm_duty;
@@ -79,8 +84,9 @@ protected:
   }subs_;
   struct{
     BufferPub<hydraulic_interfaces::msg::ValvePack> valve_state;
+    BufferPub<io_interfaces::msg::RawAnalogArray> voltage;
   }pubs_;
-  Modbus mb_;
+  std::shared_ptr<Modbus> mb_;
   Params params_;
 };
 
