@@ -35,6 +35,8 @@ Pio36Node::Pio36Node()
   // initialize commmands with non zero values so they take effect
   cmd_blocks_.eprom_flush.buffer()[0]=1;
   cmd_blocks_.restart.buffer()[0]=1;
+  cmd_blocks_.lost_comms_timeout.buffer()[0]=1;
+  cmd_blocks_.lost_comms_keep_value.buffer()[0]=0;
 }
 
 void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve){
@@ -104,6 +106,30 @@ void Pio36Node::publishResponses(){
   pubs_.voltage.publish();
 }
 
+void Pio36Node::sendStartupConfig()
+{
+  try{
+    mb_->read_input_registers(poll_blocks_.lost_comms_timeout);
+    mb_->read_input_registers(poll_blocks_.lost_comms_keep_value);
+    RCLCPP_INFO(this->get_logger(),"Booted config, timeout: %i , keep value %i",
+                poll_blocks_.lost_comms_timeout.buffer()[0],
+                poll_blocks_.lost_comms_keep_value.buffer()[0]);
+
+    mb_->write_registers(cmd_blocks_.lost_comms_timeout);
+    mb_->write_registers(cmd_blocks_.lost_comms_keep_value);
+
+    RCLCPP_INFO(this->get_logger(),"Config set to, timeout: %i , keep value %i",
+                poll_blocks_.lost_comms_timeout.buffer()[0],
+                poll_blocks_.lost_comms_keep_value.buffer()[0]);
+
+    RCLCPP_INFO(this->get_logger(),"Wrote startup config");
+  }catch(std::runtime_error err){
+    std::string error_msg = err.what();
+    RCLCPP_WARN(this->get_logger(),"Failed to write startup config: %s", error_msg.c_str());
+    connected_ = false;
+  }
+}
+
 void Pio36Node::connect()
 {
   if(connected_){
@@ -122,7 +148,8 @@ void Pio36Node::connect()
     RCLCPP_INFO(this->get_logger(),"Connected to device");
     //connect_timer_->reset();
     connected_ = true;
-    RCLCPP_INFO(this->get_logger(),"Connected!");
+    sendStartupConfig();
+
   }catch(std::runtime_error err){
     connected_ = false;
     std::string error_msg = err.what();
