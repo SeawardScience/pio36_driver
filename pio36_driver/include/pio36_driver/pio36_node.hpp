@@ -62,6 +62,7 @@ protected:
   void extracted(size_t &i);
   void poll();
   void publishResponses();
+  void sendStartupConfig();
   rclcpp::TimerBase::SharedPtr connect_timer_;
   void connect();
   bool connected_ = false;
@@ -71,12 +72,16 @@ protected:
   struct{
     blocks::PwmDuty pwm_duty;
     blocks::AnalogVoltageInput analog_inputs;
+    blocks::WordBuffer<65,1> lost_comms_timeout;
+    blocks::WordBuffer<66,1> lost_comms_keep_value;
   }poll_blocks_;
   struct{
     blocks::PwmDuty pwm_duty;
     blocks::IpConfig ip_config;
     blocks::WordBuffer<113,1> eprom_flush;
     blocks::WordBuffer<112,1> restart;
+    blocks::WordBuffer<65,1> lost_comms_timeout;
+    blocks::WordBuffer<66,1> lost_comms_keep_value;
   }cmd_blocks_;
   struct{
     rclcpp::Subscription<hydraulic_interfaces::msg::ValveStamped>::SharedPtr valve_;
