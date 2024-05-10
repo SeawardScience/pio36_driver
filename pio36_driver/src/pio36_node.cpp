@@ -35,7 +35,7 @@ Pio36Node::Pio36Node()
   // initialize commmands with non zero values so they take effect
   cmd_blocks_.eprom_flush.buffer()[0]=1;
   cmd_blocks_.restart.buffer()[0]=1;
-  cmd_blocks_.lost_comms_timeout.buffer()[0]=1;
+  cmd_blocks_.lost_comms_timeout.buffer()[0]=5;
   cmd_blocks_.lost_comms_keep_value.buffer()[0]=0;
 }
 
@@ -118,6 +118,8 @@ void Pio36Node::sendStartupConfig()
     mb_->write_registers(cmd_blocks_.lost_comms_timeout);
     mb_->write_registers(cmd_blocks_.lost_comms_keep_value);
 
+    mb_->read_input_registers(poll_blocks_.lost_comms_timeout);
+    mb_->read_input_registers(poll_blocks_.lost_comms_keep_value);
     RCLCPP_INFO(this->get_logger(),"Config set to, timeout: %i , keep value %i",
                 poll_blocks_.lost_comms_timeout.buffer()[0],
                 poll_blocks_.lost_comms_keep_value.buffer()[0]);
