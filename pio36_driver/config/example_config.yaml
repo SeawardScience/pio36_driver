@@ -1,3 +1,28 @@
-minimal_publisher:
-    ros__parameters:
-        message:  "Message set through parameter! "
+# PIO36 Driver Configuration
+# Configuration for Innova PIO36 PWM/Analog I/O board over Modbus TCP
+
+/pio36:
+  ros__parameters:
+    # Connection settings
+    connection:
+      type: tcp                      # Connection type (tcp only)
+      ip: 192.168.52.209            # Device IP address
+      network_port: 502              # Modbus TCP port (standard is 502)
+    
+    # Timer intervals (milliseconds)
+    timers:
+      poll_ms: 500                   # Input register polling interval
+      write_ms: 10                   # Output register write interval
+      connect_ms: 1000               # Connection retry interval
+    
+    # ROS topic names
+    topics:
+      valve_cmd: /odysseus4k/control/valve          # Single valve command input
+      valve_pack_cmd: cmd/valve_pack                # Multi-valve command input
+      valve_pack_response: resp/valve_pack          # Valve state feedback output
+    
+    # Control parameters
+    deadband: 0.01                   # Minimum valve setpoint (0-1 range) before zeroing
+    
+    use_sim_time: false
+
