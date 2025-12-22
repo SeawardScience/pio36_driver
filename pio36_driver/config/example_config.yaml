@@ -17,7 +17,7 @@
     
     # ROS topic names
     topics:
-      valve_cmd: /odysseus4k/control/valve          # Single valve command input
+      valve_cmd: /vessel_ns/control/valve          # Single valve command input
       valve_pack_cmd: cmd/valve_pack                # Multi-valve command input
       valve_pack_response: resp/valve_pack          # Valve state feedback output
     
