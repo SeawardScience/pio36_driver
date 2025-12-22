@@ -1,6 +1,6 @@
 # pio36_driver
 
-**pio36_driver** is a ROS2 package for interfacing with the Innova PIO36 PWM and Analog I/O board over Modbus TCP. The board provides 36 PWM outputs (0-100% duty cycle) for hydraulic valve control and 8 analog voltage inputs (0-10V) for sensor feedback.
+**pio36_driver** is a ROS2 package for interfacing with the [Innova PIO36](https://www.innova.no/product/electronic-boards/cute/cute-pio36/) PWM and Analog I/O board over Modbus TCP. The board provides 36 PWM outputs (0-100% duty cycle) for hydraulic valve control and 8 analog voltage inputs (0-10V) for sensor feedback.
 
 Complete API documentation is available at:  
 👉 [https://seawardscience.github.io/pio36_driver/](https://seawardscience.github.io/pio36_driver/)
@@ -28,6 +28,8 @@ The driver requires `libmodbus` which is not available through rosdep:
 ```bash
 sudo apt-get install libmodbus-dev
 ```
+
+The driver also utilizes `io_interfaces` and `hydraulic_interfaces` message types.
 
 ### Compiling
 
@@ -131,7 +133,7 @@ Example configuration:
 
 ## Hardware Interface
 
-- [Innova PIO36 Manual](docs/media/MAN-000139920_R2.pdf)
+Complete hardware documentation: [Innova PIO36 Manual](@ref manual)
 
 ### Register Map
 
