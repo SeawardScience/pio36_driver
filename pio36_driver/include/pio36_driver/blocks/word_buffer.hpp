@@ -5,6 +5,11 @@
 
 BLOCKS_NS_HEAD
 
+/**
+ * @brief Generic raw word buffer for arbitrary Modbus registers
+ * @tparam ADDR Innova register address (1-indexed)
+ * @tparam NUM_WORDS Number of 16-bit words in buffer
+ */
 template <int  ADDR, int  NUM_WORDS>
 class WordBuffer : public Block{
 protected:

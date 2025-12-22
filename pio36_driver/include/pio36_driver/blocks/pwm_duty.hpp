@@ -5,6 +5,12 @@
 
 BLOCKS_NS_HEAD
 
+/**
+ * @brief PWM duty cycle register block (Reg 1-36, 16 channels)
+ * 
+ * Each channel stores duty cycle as 32-bit float (0-100%).
+ * Channel numbering matches board labels (1-16, not 0-indexed).
+ */
 class PwmDuty : public Block{
 
 public:

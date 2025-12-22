@@ -8,6 +8,12 @@
 
 BLOCKS_NS_HEAD
 
+/**
+ * @brief Abstract base class for Modbus register blocks
+ * 
+ * Provides interface for type-safe register access with automatic
+ * address translation between Innova 1-indexed docs and 0-indexed Modbus.
+ */
 class Block{
 public:
   std::shared_ptr<Block> SharedPtr;
