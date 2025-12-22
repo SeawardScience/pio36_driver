@@ -71,7 +71,7 @@ void Pio36Node::writeBuffer() {
   if (connected_) {
     try {
       mb_->write_registers(cmd_blocks_.pwm_duty);
-    } catch (std::runtime_error err) {
+    } catch (const std::runtime_error& err) {
       std::string error_msg = err.what();
       RCLCPP_WARN(this->get_logger(), "modbus write failed: %s", error_msg.c_str());
       connected_ = false;
@@ -86,7 +86,7 @@ void Pio36Node::poll() {
       mb_->read_input_registers(poll_blocks_.analog_inputs);
 
       publishResponses();
-    } catch (std::runtime_error err) {
+    } catch (const std::runtime_error& err) {
       std::string error_msg = err.what();
       RCLCPP_WARN(this->get_logger(), "modbus read failed: %s", error_msg.c_str());
       connected_ = false;
@@ -128,7 +128,7 @@ void Pio36Node::sendStartupConfig()
                 poll_blocks_.lost_comms_keep_value.buffer()[0]);
 
     RCLCPP_INFO(this->get_logger(), "Wrote startup config");
-  } catch (std::runtime_error err) {
+  } catch (const std::runtime_error& err) {
     std::string error_msg = err.what();
     RCLCPP_WARN(this->get_logger(), "Failed to write startup config: %s", error_msg.c_str());
     connected_ = false;
@@ -155,7 +155,7 @@ void Pio36Node::connect()
     RCLCPP_INFO(this->get_logger(), "Connected to device");
     connected_ = true;
     sendStartupConfig();
-  } catch (std::runtime_error err) {
+  } catch (const std::runtime_error& err) {
     connected_ = false;
     std::string error_msg = err.what();
     if (connected_warn) {

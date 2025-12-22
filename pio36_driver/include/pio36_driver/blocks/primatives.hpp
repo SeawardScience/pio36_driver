@@ -53,7 +53,7 @@ struct BigEndianPrimative{
   PrimT get() const{
     prim_union output = raw;
     auto words = sizeof(PrimT)/2;
-    for(int i = 0; i < words; i++){
+    for (size_t i = 0; i < words; i++){
       output.words[i] = raw.words[words - 1 - i];
     }
     return output.u;
@@ -62,7 +62,7 @@ struct BigEndianPrimative{
     prim_union input;
     input.u = val;
     auto words = sizeof(PrimT)/2;
-    for(int i = 0; i < words; i++){
+    for (size_t i = 0; i < words; i++){
       raw.words[i] = input.words[words - 1 - i];
     }
   }
@@ -79,7 +79,7 @@ struct BigEndianPrimative{
   operator double() const {return get(); }
 
   template <typename T>
-  BigEndianPrimative&operator=(T other){this->set(other);}
+  BigEndianPrimative& operator=(T other){ this->set(other); return *this; }
 };
 
 typedef BigEndianPrimative<u32>     BE_u32;

@@ -22,7 +22,7 @@ protected:
 public:
   std::shared_ptr<PwmDuty> SharedPtr;
   PwmDuty(){
-    for (int i = 0; i < BLOCK_SIZE; ++i) {
+    for (size_t i = 0; i < BLOCK_SIZE; ++i) {
       data_.word_buffer[i]=0;
     }};
   primitives::WordBuffer buffer(){return data_.word_buffer;}
