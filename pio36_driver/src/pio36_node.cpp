@@ -1,3 +1,5 @@
+/** Copyright © 2025 Seaward Science. */
+
 #include "pio36_node.hpp"
 
 using namespace std::chrono_literals;
@@ -15,7 +17,6 @@ Pio36Node::Pio36Node()
       std::chrono::milliseconds(params_.timers.poll_ms), std::bind(&Pio36Node::poll, this));
   connect_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(params_.timers.connect_ms), std::bind(&Pio36Node::connect, this));
-  //connect();
 
   subs_.valve_ = this->create_subscription<hydraulic_interfaces::msg::ValveStamped>(
       params_.topics.valve_cmd, 24, std::bind(&Pio36Node::valveCallback, this, _1));
@@ -33,22 +34,23 @@ Pio36Node::Pio36Node()
   pubs_.voltage.msg_buff.analogs.resize(blocks::AnalogVoltageInput::NUM_CHANNELS);
 
   // initialize commmands with non zero values so they take effect
-  cmd_blocks_.eprom_flush.buffer()[0]=1;
-  cmd_blocks_.restart.buffer()[0]=1;
-  cmd_blocks_.lost_comms_timeout.buffer()[0]=5;
-  cmd_blocks_.lost_comms_keep_value.buffer()[0]=0;
+  cmd_blocks_.eprom_flush.buffer()[0] = 1;
+  cmd_blocks_.restart.buffer()[0] = 1;
+  cmd_blocks_.lost_comms_timeout.buffer()[0] = 5;
+  cmd_blocks_.lost_comms_keep_value.buffer()[0] = 0;
 }
 
-void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve){
+void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve) {
   auto value = valve.set_point * 100.0;
-  if (value > 100.0){
+  if (value > 100.0) {
     value = 100.0;
   }
-  if (value < params_.deadband){
+  if (value < params_.deadband) {
     value = 0.0;
   }
-  if (value < 0.0){
-    RCLCPP_WARN_ONCE(this->get_logger(),"This board does not support negative valve commands, received a negative value for thrust on channel %i", valve.valve_id);
+  if (value < 0.0) {
+    RCLCPP_WARN_ONCE(this->get_logger(), "This board does not support negative valve commands, "
+                     "received a negative value for thrust on channel %i", valve.valve_id);
   }
   cmd_blocks_.pwm_duty.dutyChan(valve.valve_id) = value;
 }
@@ -57,49 +59,50 @@ void Pio36Node::valveCallback(const hydraulic_interfaces::msg::ValveStamped::Sha
   valveHandler(msg->valve);
 }
 
-void Pio36Node::valvePackCallback(const hydraulic_interfaces::msg::ValvePack::SharedPtr msg){
-  for(auto valve: msg->valves){
+void Pio36Node::valvePackCallback(const hydraulic_interfaces::msg::ValvePack::SharedPtr msg) {
+  for (auto valve : msg->valves) {
     valveHandler(valve);
   }
 }
 
-void Pio36Node::writeBuffer(){
+void Pio36Node::writeBuffer() {
   RCLCPP_DEBUG(this->get_logger(), "pwm_duty: %s", cmd_blocks_.pwm_duty.hexString().c_str());
 
-  if(connected_){
-    try{
+  if (connected_) {
+    try {
       mb_->write_registers(cmd_blocks_.pwm_duty);
-    }catch(std::runtime_error err){
+    } catch (std::runtime_error err) {
       std::string error_msg = err.what();
-      RCLCPP_WARN(this->get_logger(),"modbus write failed: %s", error_msg.c_str());
+      RCLCPP_WARN(this->get_logger(), "modbus write failed: %s", error_msg.c_str());
       connected_ = false;
     }
   }
 }
 
-void Pio36Node::poll(){
-  if(connected_){
-    try{
+void Pio36Node::poll() {
+  if (connected_) {
+    try {
       mb_->read_input_registers(poll_blocks_.pwm_duty);
       mb_->read_input_registers(poll_blocks_.analog_inputs);
 
       publishResponses();
-    }catch(std::runtime_error err){
+    } catch (std::runtime_error err) {
       std::string error_msg = err.what();
-      RCLCPP_WARN(this->get_logger(),"modbus read failed: %s", error_msg.c_str());
+      RCLCPP_WARN(this->get_logger(), "modbus read failed: %s", error_msg.c_str());
       connected_ = false;
     }
   }
 }
 
-void Pio36Node::publishResponses(){
-  for(size_t i = 1; i <= blocks::PwmDuty::NUM_PWM_CHANNELS; i++){
-    pubs_.valve_state.msg_buff.valves[i-1].set_point = double(poll_blocks_.pwm_duty.dutyChan(i)) / 100.0;
+void Pio36Node::publishResponses() {
+  for (size_t i = 1; i <= blocks::PwmDuty::NUM_PWM_CHANNELS; i++) {
+    pubs_.valve_state.msg_buff.valves[i-1].set_point = static_cast<double>(poll_blocks_.pwm_duty.dutyChan(i)) / 100.0;
     pubs_.valve_state.msg_buff.valves[i-1].valve_id = i;
   }
   pubs_.valve_state.publish();
-  for(size_t i = 1 ; i <= blocks::AnalogVoltageInput::NUM_CHANNELS ; i++){
-    pubs_.voltage.msg_buff.analogs[i-1].proportional_value = double(poll_blocks_.analog_inputs.chanel(i))/10.0;
+  for (size_t i = 1; i <= blocks::AnalogVoltageInput::NUM_CHANNELS; i++) {
+    pubs_.voltage.msg_buff.analogs[i-1].proportional_value =
+        static_cast<double>(poll_blocks_.analog_inputs.chanel(i))/10.0;
     pubs_.voltage.msg_buff.analogs[i-1].scale = 10.0;
     pubs_.voltage.msg_buff.analogs[i-1].channel_id = i;
   }
@@ -108,10 +111,10 @@ void Pio36Node::publishResponses(){
 
 void Pio36Node::sendStartupConfig()
 {
-  try{
+  try {
     mb_->read_input_registers(poll_blocks_.lost_comms_timeout);
     mb_->read_input_registers(poll_blocks_.lost_comms_keep_value);
-    RCLCPP_INFO(this->get_logger(),"Booted config, timeout: %i , keep value %i",
+    RCLCPP_INFO(this->get_logger(), "Booted config, timeout: %i , keep value %i",
                 poll_blocks_.lost_comms_timeout.buffer()[0],
                 poll_blocks_.lost_comms_keep_value.buffer()[0]);
 
@@ -120,43 +123,44 @@ void Pio36Node::sendStartupConfig()
 
     mb_->read_input_registers(poll_blocks_.lost_comms_timeout);
     mb_->read_input_registers(poll_blocks_.lost_comms_keep_value);
-    RCLCPP_INFO(this->get_logger(),"Config set to, timeout: %i , keep value %i",
+    RCLCPP_INFO(this->get_logger(), "Config set to, timeout: %i , keep value %i",
                 poll_blocks_.lost_comms_timeout.buffer()[0],
                 poll_blocks_.lost_comms_keep_value.buffer()[0]);
 
-    RCLCPP_INFO(this->get_logger(),"Wrote startup config");
-  }catch(std::runtime_error err){
+    RCLCPP_INFO(this->get_logger(), "Wrote startup config");
+  } catch (std::runtime_error err) {
     std::string error_msg = err.what();
-    RCLCPP_WARN(this->get_logger(),"Failed to write startup config: %s", error_msg.c_str());
+    RCLCPP_WARN(this->get_logger(), "Failed to write startup config: %s", error_msg.c_str());
     connected_ = false;
   }
 }
 
 void Pio36Node::connect()
 {
-  if(connected_){
+  if (connected_) {
     return;
     connected_warn = true;
   }
-  try{
+  try {
     mb_.reset(new Modbus);
-    if(params_.connection.type == "tcp"){
-      RCLCPP_INFO_ONCE(this->get_logger(),"Connecting to %s:%i",params_.connection.ip.c_str(), params_.connection.network_port);
+    if (params_.connection.type == "tcp") {
+      RCLCPP_INFO_ONCE(this->get_logger(), "Connecting to %s:%i",
+                       params_.connection.ip.c_str(), params_.connection.network_port);
       mb_->connect_tcp(params_.connection.ip.c_str(), params_.connection.network_port);
-    }else{
-      RCLCPP_ERROR(this->get_logger(),"Invalid connection type specified %s",params_.connection.type.c_str());
+    } else {
+      RCLCPP_ERROR(this->get_logger(), "Invalid connection type specified %s",
+                   params_.connection.type.c_str());
       return;
     }
-    RCLCPP_INFO(this->get_logger(),"Connected to device");
-    //connect_timer_->reset();
+    RCLCPP_INFO(this->get_logger(), "Connected to device");
     connected_ = true;
     sendStartupConfig();
-
-  }catch(std::runtime_error err){
+  } catch (std::runtime_error err) {
     connected_ = false;
     std::string error_msg = err.what();
-    if(connected_warn){
-      RCLCPP_WARN(this->get_logger(),"Unable to connect to %s: %s",params_.connection.ip.c_str(), error_msg.c_str());
+    if (connected_warn) {
+      RCLCPP_WARN(this->get_logger(), "Unable to connect to %s: %s",
+                  params_.connection.ip.c_str(), error_msg.c_str());
     }
     connected_warn = false;
   }
