@@ -22,12 +22,12 @@ NS_HEAD  // macro for consistantly defining our namespace for the package
  */
 template<typename msg_T>
 struct BufferPub{
-  void setup(rclcpp::Node * node_ptr, std::string topic){
+  void setup(rclcpp::Node * node_ptr, std::string topic) {
     pub = node_ptr->create_publisher<msg_T>(topic, 10);
   }
   typename rclcpp::Publisher<msg_T>::SharedPtr pub;
   msg_T msg_buff;  ///< Message buffer updated before publish
-  void publish(){
+  void publish() {
     pub->publish(msg_buff);
   }
 };
@@ -45,22 +45,22 @@ public:
   /**
    * @brief Configuration parameters for PIO36 node
    */
-  struct Params{
-    struct{
+  struct Params {
+    struct {
       int poll_ms = 500;        ///< Input register polling interval (ms)
       int connect_ms = 1000;    ///< Connection retry interval (ms)
       int write_ms = 10;        ///< Output register write interval (ms)
-    }timers;
-    struct{
+    } timers;
+    struct {
       std::string type = "tcp";              ///< Connection type (tcp only)
       std::string ip   = "192.168.52.209";   ///< Device IP address
       int network_port = 502;                ///< Modbus TCP port
-    }connection;
-    struct{
+    } connection;
+    struct {
       std::string valve_cmd = "/odysseus4k/control/valve";  ///< Single valve command topic
       std::string valve_pack_cmd = "cmd/valve_pack";        ///< Multi-valve command topic
       std::string valve_pack_response = "resp/valve_pack";  ///< Valve state response topic
-    }topics;
+    } topics;
     float deadband = 0.01;  ///< Minimum valve setpoint before zeroing (0-1 range)
 
     void declare(rclcpp::Node * node);  ///< Declare ROS parameters
@@ -105,34 +105,34 @@ protected:
   bool connected_warn = true;   ///< Flag to throttle connection warnings
   
   /** @brief Modbus input register blocks (read from device) */
-  struct{
+  struct {
     blocks::PwmDuty pwm_duty;                       ///< Reg 1-36: PWM duty cycle feedback
     blocks::AnalogVoltageInput analog_inputs;       ///< Reg 37-44: Analog voltage inputs (0-10V)
     blocks::WordBuffer<65,1> lost_comms_timeout;    ///< Reg 65: Lost comms timeout (sec)
     blocks::WordBuffer<66,1> lost_comms_keep_value; ///< Reg 66: Keep last value on timeout (0/1)
-  }poll_blocks_;
+  } poll_blocks_;
   
   /** @brief Modbus holding register blocks (write to device) */
-  struct{
+  struct {
     blocks::PwmDuty pwm_duty;                       ///< Reg 1-36: PWM duty cycle setpoints (0-100)
     blocks::IpConfig ip_config;                     ///< Reg 45-52: IP configuration
     blocks::WordBuffer<113,1> eprom_flush;          ///< Reg 113: Save config to EEPROM
     blocks::WordBuffer<112,1> restart;              ///< Reg 112: Restart device
     blocks::WordBuffer<65,1> lost_comms_timeout;    ///< Reg 65: Lost comms timeout (sec)
     blocks::WordBuffer<66,1> lost_comms_keep_value; ///< Reg 66: Keep last value on timeout (0/1)
-  }cmd_blocks_;
+  } cmd_blocks_;
   
   /** @brief ROS2 subscriptions */
-  struct{
+  struct {
     rclcpp::Subscription<hydraulic_interfaces::msg::ValveStamped>::SharedPtr valve_;
     rclcpp::Subscription<hydraulic_interfaces::msg::ValvePack>::SharedPtr valve_pack_;
-  }subs_;
+  } subs_;
   
   /** @brief ROS2 publishers */
-  struct{
+  struct {
     BufferPub<hydraulic_interfaces::msg::ValvePack> valve_state;  ///< PWM duty feedback
     BufferPub<io_interfaces::msg::RawAnalogArray> voltage;        ///< Analog input voltages
-  }pubs_;
+  } pubs_;
   
   std::shared_ptr<Modbus> mb_;  ///< Modbus TCP connection handler
   Params params_;               ///< Node configuration parameters

@@ -6,8 +6,6 @@ using namespace std::chrono_literals;
 using std::placeholders::_1;
 NS_HEAD
 
-
-
 Pio36Node::Pio36Node()
     : Node("pio36")
 {
@@ -102,7 +100,7 @@ void Pio36Node::publishResponses() {
   pubs_.valve_state.publish();
   for (size_t i = 1; i <= blocks::AnalogVoltageInput::NUM_CHANNELS; i++) {
     pubs_.voltage.msg_buff.analogs[i-1].proportional_value =
-        static_cast<double>(poll_blocks_.analog_inputs.chanel(i))/10.0;
+        static_cast<double>(poll_blocks_.analog_inputs.channel(i))/10.0;
     pubs_.voltage.msg_buff.analogs[i-1].scale = 10.0;
     pubs_.voltage.msg_buff.analogs[i-1].channel_id = i;
   }

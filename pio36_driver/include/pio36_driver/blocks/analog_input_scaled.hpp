@@ -35,7 +35,7 @@ public:
   size_t size(){return BLOCK_SIZE;}
 
   /** @brief Access analog voltage channel (1-8) */
-  primitives::BE_f32 & chanel(size_t chan){return data_.type.analog[chan-1];}
+  primitives::BE_f32 & channel(size_t chan){return data_.type.analog[chan-1];}
   /*!
    * \brief innovaAddress returns the of the PWM block in the innova documentation
    * \return
