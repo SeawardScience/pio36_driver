@@ -110,6 +110,10 @@ protected:
     blocks::AnalogVoltageInput analog_inputs;       ///< Reg 37-44: Analog voltage inputs (0-10V)
     blocks::WordBuffer<65,1> lost_comms_timeout;    ///< Reg 65: Lost comms timeout (sec)
     blocks::WordBuffer<66,1> lost_comms_keep_value; ///< Reg 66: Keep last value on timeout (0/1)
+    blocks::WordBuffer<99,1> sensor_power_config;   ///< Reg 99: Sensor power configuration
+    blocks::WordBuffer<102,1> system_warnings;      ///< Reg 102: System warnings bitmask
+    blocks::WordBuffer<103,1> sensor_alarms;        ///< Reg 103: Sensor alarms bitmask
+    blocks::WordBuffer<104,1> pwm_faults;           ///< Reg 104: PWM fault status bitmask
   } poll_blocks_;
   
   /** @brief Modbus holding register blocks (write to device) */
@@ -120,6 +124,8 @@ protected:
     blocks::WordBuffer<112,1> restart;              ///< Reg 112: Restart device
     blocks::WordBuffer<65,1> lost_comms_timeout;    ///< Reg 65: Lost comms timeout (sec)
     blocks::WordBuffer<66,1> lost_comms_keep_value; ///< Reg 66: Keep last value on timeout (0/1)
+    blocks::WordBuffer<104,1> pwm_faults;           ///< Reg 104: Write 1s to clear corresponding fault bits
+    blocks::WordBuffer<1033,1> pwm_ignore_faults;   ///< Reg 1033: Bitmask to enable outputs despite faults
   } cmd_blocks_;
   
   /** @brief ROS2 subscriptions */

@@ -36,7 +36,7 @@ Pio36Node::Pio36Node()
   cmd_blocks_.restart.buffer()[0] = 1;
   cmd_blocks_.lost_comms_timeout.buffer()[0] = 5;
   cmd_blocks_.lost_comms_keep_value.buffer()[0] = 0;
-}
+  // cmd_blocks_.pwm_ignore_faults.buffer()[0] = 0xFFFF;  // Enable all 16 channels regardless of faults  cmd_blocks_.sensor_power_enable.buffer()[0] = 1;     // Enable output power}
 
 void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve) {
   auto value = valve.set_point * 100.0;
@@ -50,6 +50,7 @@ void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve) {
     RCLCPP_WARN_ONCE(this->get_logger(), "This board does not support negative valve commands, "
                      "received a negative value for thrust on channel %i", valve.valve_id);
   }
+  RCLCPP_DEBUG(this->get_logger(), "Setting valve %i to %.2f%%", valve.valve_id, value);
   cmd_blocks_.pwm_duty.dutyChan(valve.valve_id) = value;
 }
 
@@ -58,6 +59,7 @@ void Pio36Node::valveCallback(const hydraulic_interfaces::msg::ValveStamped::Sha
 }
 
 void Pio36Node::valvePackCallback(const hydraulic_interfaces::msg::ValvePack::SharedPtr msg) {
+  RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Received valve pack message with %zu valves", msg->valves.size());
   for (auto valve : msg->valves) {
     valveHandler(valve);
   }
@@ -69,11 +71,15 @@ void Pio36Node::writeBuffer() {
   if (connected_) {
     try {
       mb_->write_registers(cmd_blocks_.pwm_duty);
+      RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Successfully wrote PWM values to device");
     } catch (const std::runtime_error& err) {
       std::string error_msg = err.what();
       RCLCPP_WARN(this->get_logger(), "modbus write failed: %s", error_msg.c_str());
       connected_ = false;
     }
+  } else {
+    RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
+                          "Cannot write - not connected to device");
   }
 }
 
@@ -115,6 +121,29 @@ void Pio36Node::sendStartupConfig()
     RCLCPP_INFO(this->get_logger(), "Booted config, timeout: %i , keep value %i",
                 poll_blocks_.lost_comms_timeout.buffer()[0],
                 poll_blocks_.lost_comms_keep_value.buffer()[0]);
+
+    // Read comprehensive diagnostics
+    mb_->read_input_registers(poll_blocks_.system_warnings);
+    mb_->read_input_registers(poll_blocks_.sensor_alarms);
+    mb_->read_input_registers(poll_blocks_.pwm_faults);
+    
+    uint16_t warnings = poll_blocks_.system_warnings.buffer()[0];
+    uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0];
+    uint16_t faults = poll_blocks_.pwm_faults.buffer()[0];
+    
+    RCLCPP_INFO(this->get_logger(), "=== PIO36 Board Diagnostics ===");
+    RCLCPP_INFO(this->get_logger(), "System Warnings: 0x%04X", warnings);
+    RCLCPP_INFO(this->get_logger(), "Sensor Alarms: 0x%04X", alarms);
+    RCLCPP_INFO(this->get_logger(), "PWM Faults: 0x%04X", faults);
+    
+    if (faults != 0) {
+      RCLCPP_WARN(this->get_logger(), "PWM Faults detected on channels:");
+      for (int i = 0; i < 16; i++) {
+        if (faults & (1 << i)) {
+          RCLCPP_WARN(this->get_logger(), "  Channel %d", i + 1);
+        }
+      }
+    }
 
     mb_->write_registers(cmd_blocks_.lost_comms_timeout);
     mb_->write_registers(cmd_blocks_.lost_comms_keep_value);
