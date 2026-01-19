@@ -36,7 +36,9 @@ Pio36Node::Pio36Node()
   cmd_blocks_.restart.buffer()[0] = 1;
   cmd_blocks_.lost_comms_timeout.buffer()[0] = 5;
   cmd_blocks_.lost_comms_keep_value.buffer()[0] = 0;
-  // cmd_blocks_.pwm_ignore_faults.buffer()[0] = 0xFFFF;  // Enable all 16 channels regardless of faults  cmd_blocks_.sensor_power_enable.buffer()[0] = 1;     // Enable output power}
+  // cmd_blocks_.pwm_ignore_faults.buffer()[0] = 0xFFFF;  // Enable all 16 channels regardless of faults
+  // cmd_blocks_.sensor_power_enable.buffer()[0] = 1;     // Enable output power
+}
 
 void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve) {
   auto value = valve.set_point * 100.0;
