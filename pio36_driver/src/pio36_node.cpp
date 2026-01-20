@@ -36,8 +36,8 @@ Pio36Node::Pio36Node()
   cmd_blocks_.restart.buffer()[0] = 1;
   cmd_blocks_.lost_comms_timeout.buffer()[0] = 5;
   cmd_blocks_.lost_comms_keep_value.buffer()[0] = 0;
-  // cmd_blocks_.pwm_ignore_faults.buffer()[0] = 0xFFFF;  // Enable all 16 channels regardless of faults
-  // cmd_blocks_.sensor_power_enable.buffer()[0] = 1;     // Enable output power
+  cmd_blocks_.pwm_ignore_faults.buffer()[0] = 0xFFFF;  // Enable all 16 channels regardless of faults
+  cmd_blocks_.sensor_power_config.buffer()[0] = 0x01;  // Bit 0: Ignore sensor power fault
 }
 
 void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve) {
@@ -75,20 +75,17 @@ void Pio36Node::valvePackCallback(const hydraulic_interfaces::msg::ValvePack::Sh
 }
 
 void Pio36Node::writeBuffer() {
-  RCLCPP_DEBUG(this->get_logger(), "pwm_duty: %s", cmd_blocks_.pwm_duty.hexString().c_str());
-
   if (connected_) {
     try {
       mb_->write_registers(cmd_blocks_.pwm_duty);
-      RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Successfully wrote PWM values to device");
     } catch (const std::runtime_error& err) {
       std::string error_msg = err.what();
       RCLCPP_WARN(this->get_logger(), "modbus write failed: %s", error_msg.c_str());
       connected_ = false;
     }
   } else {
-    RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
-                          "Cannot write - not connected to device");
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000, 
+                         "Cannot write - not connected to device");
   }
 }
 
@@ -97,7 +94,6 @@ void Pio36Node::poll() {
     try {
       mb_->read_input_registers(poll_blocks_.pwm_duty);
       mb_->read_input_registers(poll_blocks_.analog_inputs);
-
       publishResponses();
     } catch (const std::runtime_error& err) {
       std::string error_msg = err.what();
@@ -125,35 +121,6 @@ void Pio36Node::publishResponses() {
 void Pio36Node::sendStartupConfig()
 {
   try {
-    mb_->read_input_registers(poll_blocks_.lost_comms_timeout);
-    mb_->read_input_registers(poll_blocks_.lost_comms_keep_value);
-    RCLCPP_INFO(this->get_logger(), "Booted config, timeout: %i , keep value %i",
-                poll_blocks_.lost_comms_timeout.buffer()[0],
-                poll_blocks_.lost_comms_keep_value.buffer()[0]);
-
-    // Read comprehensive diagnostics
-    mb_->read_input_registers(poll_blocks_.system_warnings);
-    mb_->read_input_registers(poll_blocks_.sensor_alarms);
-    mb_->read_input_registers(poll_blocks_.pwm_faults);
-    
-    uint16_t warnings = poll_blocks_.system_warnings.buffer()[0];
-    uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0];
-    uint16_t faults = poll_blocks_.pwm_faults.buffer()[0];
-    
-    RCLCPP_INFO(this->get_logger(), "=== PIO36 Board Diagnostics ===");
-    RCLCPP_INFO(this->get_logger(), "System Warnings: 0x%04X", warnings);
-    RCLCPP_INFO(this->get_logger(), "Sensor Alarms: 0x%04X", alarms);
-    RCLCPP_INFO(this->get_logger(), "PWM Faults: 0x%04X", faults);
-    
-    if (faults != 0) {
-      RCLCPP_WARN(this->get_logger(), "PWM Faults detected on channels:");
-      for (int i = 0; i < 16; i++) {
-        if (faults & (1 << i)) {
-          RCLCPP_WARN(this->get_logger(), "  Channel %d", i + 1);
-        }
-      }
-    }
-
     mb_->write_registers(cmd_blocks_.lost_comms_timeout);
     mb_->write_registers(cmd_blocks_.lost_comms_keep_value);
 
@@ -163,7 +130,32 @@ void Pio36Node::sendStartupConfig()
                 poll_blocks_.lost_comms_timeout.buffer()[0],
                 poll_blocks_.lost_comms_keep_value.buffer()[0]);
 
-    RCLCPP_INFO(this->get_logger(), "Wrote startup config");
+    // Read board diagnostics
+    mb_->read_input_registers(poll_blocks_.system_warnings);
+    mb_->read_input_registers(poll_blocks_.sensor_alarms);
+    mb_->read_input_registers(poll_blocks_.pwm_faults);
+    uint16_t warnings = poll_blocks_.system_warnings.buffer()[0];
+    uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0];
+    uint16_t faults = poll_blocks_.pwm_faults.buffer()[0];
+
+    RCLCPP_INFO(this->get_logger(), "Board status - Warnings: 0x%04X, Alarms: 0x%04X, PWM Faults: 0x%04X", 
+                warnings, alarms, faults);
+    
+    if (warnings != 0) {
+      decodeBitmask(warnings, SYSTEM_WARNING_BITS, 
+                    sizeof(SYSTEM_WARNING_BITS)/sizeof(SYSTEM_WARNING_BITS[0]), "System Warning");
+    }
+    if (alarms != 0) {
+      decodeBitmask(alarms, SENSOR_ALARM_BITS, 
+                    sizeof(SENSOR_ALARM_BITS)/sizeof(SENSOR_ALARM_BITS[0]), "Sensor Alarm");
+    }
+    
+    // Clear all sensor alarms to enable PWM system
+    cmd_blocks_.sensor_alarms.buffer()[0] = 0xFFFF;
+    mb_->write_registers(cmd_blocks_.sensor_alarms);
+    RCLCPP_INFO(this->get_logger(), "Cleared sensor alarms");
+
+    RCLCPP_INFO(this->get_logger(), "PIO36 initialization complete");
   } catch (const std::runtime_error& err) {
     std::string error_msg = err.what();
     RCLCPP_WARN(this->get_logger(), "Failed to write startup config: %s", error_msg.c_str());
@@ -240,6 +232,14 @@ void Pio36Node::Params::update(rclcpp::Node *node)
   node->get_parameter("topics.valve_pack_response", topics.valve_pack_response);
 
   node->get_parameter("deadband", deadband);
+}
+
+void Pio36Node::decodeBitmask(uint16_t bitmask, const BitDescription* bits, size_t count, const char* type) {
+  for (size_t i = 0; i < count; i++) {
+    if (bitmask & (1 << bits[i].bit)) {
+      RCLCPP_WARN(this->get_logger(), "%s: %s", type, bits[i].description);
+    }
+  }
 }
 
 NS_FOOT

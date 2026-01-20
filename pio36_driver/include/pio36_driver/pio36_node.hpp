@@ -17,6 +17,38 @@
 NS_HEAD  // macro for consistantly defining our namespace for the package
 
 /**
+ * @brief Helper structure for bitmask decoding
+ */
+struct BitDescription {
+  uint8_t bit;
+  const char* description;
+};
+
+/**
+ * @brief System warning bit descriptions (Register 102)
+ */
+static constexpr BitDescription SYSTEM_WARNING_BITS[] = {
+  {0, "Unexpected restart (watchdog)"},
+  {1, "Hardware fault"},
+  {2, "Persistent storage fault"}
+};
+
+/**
+ * @brief Sensor alarm bit descriptions (Register 103)
+ */
+static constexpr BitDescription SENSOR_ALARM_BITS[] = {
+  {0, "Water detected"},
+  {1, "Low supply voltage"},
+  {2, "High supply voltage"},
+  {3, "High supply current"},
+  {4, "High CPU temperature"},
+  {5, "Low Pt100 temperature"},
+  {6, "High Pt100 temperature"},
+  {7, "Sensor power fault (short/open circuit)"},
+  {8, "Lost communications timeout"}
+};
+
+/**
  * @brief Helper template for buffered ROS2 publishers
  * @tparam msg_T ROS message type
  */
@@ -97,6 +129,9 @@ protected:
   /** @brief Timer callback to establish/maintain Modbus connection */
   void connect();
   
+  /** @brief Decode and log bitmask using bit descriptions */
+  void decodeBitmask(uint16_t bitmask, const BitDescription* bits, size_t count, const char* type);
+  
   rclcpp::TimerBase::SharedPtr connect_timer_;  ///< Connection retry timer
   rclcpp::TimerBase::SharedPtr poll_timer_;     ///< Input polling timer
   rclcpp::TimerBase::SharedPtr write_timer_;    ///< Output write timer
@@ -124,6 +159,9 @@ protected:
     blocks::WordBuffer<112,1> restart;              ///< Reg 112: Restart device
     blocks::WordBuffer<65,1> lost_comms_timeout;    ///< Reg 65: Lost comms timeout (sec)
     blocks::WordBuffer<66,1> lost_comms_keep_value; ///< Reg 66: Keep last value on timeout (0/1)
+    blocks::WordBuffer<99,1> sensor_power_config;   ///< Reg 99: Sensor power enable/config
+    blocks::WordBuffer<102,1> system_warnings;      ///< Reg 102: Write 1s to clear system warnings
+    blocks::WordBuffer<103,1> sensor_alarms;        ///< Reg 103: Write 1s to clear sensor alarms
     blocks::WordBuffer<104,1> pwm_faults;           ///< Reg 104: Write 1s to clear corresponding fault bits
     blocks::WordBuffer<1033,1> pwm_ignore_faults;   ///< Reg 1033: Bitmask to enable outputs despite faults
   } cmd_blocks_;
