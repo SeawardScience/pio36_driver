@@ -41,6 +41,13 @@ Pio36Node::Pio36Node()
 }
 
 void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve) {
+  if (valve.valve_id < 1 || valve.valve_id > blocks::PwmDuty::NUM_PWM_CHANNELS) {
+    RCLCPP_WARN_THROTTLE(
+      this->get_logger(), *this->get_clock(), 2000,
+      "Valve id %u out of range (1..%zu). Ignoring command.",
+      valve.valve_id, blocks::PwmDuty::NUM_PWM_CHANNELS);
+    return;
+  }
   auto value = valve.set_point * 100.0;
   if (value > 100.0) {
     value = 100.0;
