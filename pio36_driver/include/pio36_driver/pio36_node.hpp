@@ -149,6 +149,7 @@ protected:
     blocks::WordBuffer<102,1> system_warnings;      ///< Reg 102: System warnings bitmask
     blocks::WordBuffer<103,1> sensor_alarms;        ///< Reg 103: Sensor alarms bitmask
     blocks::WordBuffer<104,1> pwm_faults;           ///< Reg 104: PWM fault status bitmask
+    blocks::WordBuffer<1033,1> pwm_ignore_faults;   ///< Reg 1033: PWM fault ignore mask
   } poll_blocks_;
   
   /** @brief Modbus holding register blocks (write to device) */
