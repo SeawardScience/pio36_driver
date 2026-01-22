@@ -1,6 +1,7 @@
 /** Copyright © 2025 Seaward Science. */
 
 #include "pio36_node.hpp"
+#include <cstring>
 
 using namespace std::chrono_literals;
 using std::placeholders::_1;
@@ -22,14 +23,20 @@ Pio36Node::Pio36Node()
   subs_.valve_pack_ = this->create_subscription<hydraulic_interfaces::msg::ValvePack>(
       params_.topics.valve_pack_cmd, 1, std::bind(&Pio36Node::valvePackCallback, this, _1));
 
+  subs_.dither_ = this->create_subscription<pio36_interfaces::msg::DitherPack>(
+      params_.topics.dither_cmd, 1, std::bind(&Pio36Node::ditherCallback, this, _1));
+
   write_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(params_.timers.write_ms), std::bind(&Pio36Node::writeBuffer, this));
 
-  pubs_.valve_state.setup(this, "~/valve_state");
+  pubs_.valve_state.setup(this, "valve_state");
   pubs_.valve_state.msg_buff.valves.resize(blocks::PwmDuty::NUM_PWM_CHANNELS);
 
-  pubs_.voltage.setup(this, "~/analog_input_voltage");
+  pubs_.voltage.setup(this, "analog_input_voltage");
   pubs_.voltage.msg_buff.analogs.resize(blocks::AnalogVoltageInput::NUM_CHANNELS);
+
+  pubs_.dither_state.setup(this, "dither_state");
+  pubs_.dither_state.msg_buff.dithers.resize(blocks::PwmDuty::NUM_PWM_CHANNELS);
 
   // initialize commmands with non zero values so they take effect
   cmd_blocks_.eprom_flush.buffer()[0] = 1;
@@ -74,6 +81,40 @@ void Pio36Node::valvePackCallback(const hydraulic_interfaces::msg::ValvePack::Sh
   }
 }
 
+void Pio36Node::ditherCallback(const pio36_interfaces::msg::DitherPack::SharedPtr msg) {
+  RCLCPP_DEBUG(this->get_logger(), "Received dither pack with %zu channels", msg->dithers.size());
+  for (const auto& dither : msg->dithers) {
+    if (dither.channel_id < 1 || dither.channel_id > blocks::PwmDuty::NUM_PWM_CHANNELS) {
+      RCLCPP_WARN_THROTTLE(
+        this->get_logger(), *this->get_clock(), 2000,
+        "Dither channel_id %d out of range (1..%zu). Ignoring.",
+        dither.channel_id, blocks::PwmDuty::NUM_PWM_CHANNELS);
+      continue;
+    }
+    
+    // Set dither parameters for this channel
+    cmd_blocks_.dither_duty.ditherDutyChan(dither.channel_id) = dither.dither_duty;
+    cmd_blocks_.dither_frequency.ditherFreqChan(dither.channel_id) = dither.dither_frequency;
+    cmd_blocks_.dither_phase.ditherPhaseChan(dither.channel_id) = dither.dither_phase;
+    
+    RCLCPP_DEBUG(this->get_logger(), 
+                 "Set channel %d dither: duty=%.2f%%, freq=%.2fHz, phase=%.1f°",
+                 dither.channel_id, dither.dither_duty, dither.dither_frequency, dither.dither_phase);
+  }
+  
+  // Write dither registers immediately
+  if (connected_) {
+    try {
+      mb_->write_registers(cmd_blocks_.dither_duty);
+      mb_->write_registers(cmd_blocks_.dither_frequency);
+      mb_->write_registers(cmd_blocks_.dither_phase);
+      RCLCPP_DEBUG(this->get_logger(), "Dither parameters written to device");
+    } catch (const std::runtime_error& err) {
+      RCLCPP_WARN(this->get_logger(), "Failed to write dither parameters: %s", err.what());
+    }
+  }
+}
+
 void Pio36Node::writeBuffer() {
   if (connected_) {
     try {
@@ -94,6 +135,9 @@ void Pio36Node::poll() {
     try {
       mb_->read_input_registers(poll_blocks_.pwm_duty);
       mb_->read_input_registers(poll_blocks_.analog_inputs);
+      mb_->read_input_registers(poll_blocks_.dither_duty);
+      mb_->read_input_registers(poll_blocks_.dither_frequency);
+      mb_->read_input_registers(poll_blocks_.dither_phase);
       publishResponses();
     } catch (const std::runtime_error& err) {
       std::string error_msg = err.what();
@@ -109,6 +153,7 @@ void Pio36Node::publishResponses() {
     pubs_.valve_state.msg_buff.valves[i-1].valve_id = i;
   }
   pubs_.valve_state.publish();
+  
   for (size_t i = 1; i <= blocks::AnalogVoltageInput::NUM_CHANNELS; i++) {
     pubs_.voltage.msg_buff.analogs[i-1].proportional_value =
         static_cast<double>(poll_blocks_.analog_inputs.channel(i))/10.0;
@@ -116,6 +161,17 @@ void Pio36Node::publishResponses() {
     pubs_.voltage.msg_buff.analogs[i-1].channel_id = i;
   }
   pubs_.voltage.publish();
+  
+  pubs_.dither_state.msg_buff.header.stamp = this->now();
+  pubs_.dither_state.msg_buff.header.frame_id = "";
+  for (size_t i = 1; i <= blocks::PwmDuty::NUM_PWM_CHANNELS; i++) {
+    auto& dither = pubs_.dither_state.msg_buff.dithers[i-1];
+    dither.channel_id = i;
+    dither.dither_duty = static_cast<float>(poll_blocks_.dither_duty.ditherDutyChan(i));
+    dither.dither_frequency = static_cast<float>(poll_blocks_.dither_frequency.ditherFreqChan(i));
+    dither.dither_phase = static_cast<float>(poll_blocks_.dither_phase.ditherPhaseChan(i));
+  }
+  pubs_.dither_state.publish();
 }
 
 void Pio36Node::sendStartupConfig()
@@ -140,6 +196,23 @@ void Pio36Node::sendStartupConfig()
 
     RCLCPP_INFO(this->get_logger(), "Board status - Warnings: 0x%04X, Alarms: 0x%04X, PWM Faults: 0x%04X", 
                 warnings, alarms, faults);
+    
+    // Read initial PWM frequencies
+    mb_->read_input_registers(poll_blocks_.pwm_freq_1_4);
+    mb_->read_input_registers(poll_blocks_.pwm_freq_5_8);
+    mb_->read_input_registers(poll_blocks_.pwm_freq_9_12);
+    mb_->read_input_registers(poll_blocks_.pwm_freq_13_16);
+    
+    // Convert from big-endian word buffer to float
+    primitives::BE_f32 freq_1_4, freq_5_8, freq_9_12, freq_13_16;
+    std::memcpy(&freq_1_4, poll_blocks_.pwm_freq_1_4.buffer(), sizeof(float));
+    std::memcpy(&freq_5_8, poll_blocks_.pwm_freq_5_8.buffer(), sizeof(float));
+    std::memcpy(&freq_9_12, poll_blocks_.pwm_freq_9_12.buffer(), sizeof(float));
+    std::memcpy(&freq_13_16, poll_blocks_.pwm_freq_13_16.buffer(), sizeof(float));
+    
+    RCLCPP_INFO(this->get_logger(), "PWM Frequencies - Ch1-4: %.1fHz, Ch5-8: %.1fHz, Ch9-12: %.1fHz, Ch13-16: %.1fHz",
+                static_cast<float>(freq_1_4), static_cast<float>(freq_5_8), 
+                static_cast<float>(freq_9_12), static_cast<float>(freq_13_16));
     
     if (warnings != 0) {
       decodeBitmask(warnings, SYSTEM_WARNING_BITS, 
@@ -210,6 +283,7 @@ void Pio36Node::Params::declare(rclcpp::Node *node)
   node->declare_parameter("topics.valve_cmd", topics.valve_cmd);
   node->declare_parameter("topics.valve_pack_cmd", topics.valve_pack_cmd);
   node->declare_parameter("topics.valve_pack_response", topics.valve_pack_response);
+  node->declare_parameter("topics.dither_cmd", topics.dither_cmd);
 
   node->declare_parameter("deadband", deadband);
 }
@@ -230,6 +304,7 @@ void Pio36Node::Params::update(rclcpp::Node *node)
   node->get_parameter("topics.valve_cmd", topics.valve_cmd);
   node->get_parameter("topics.valve_pack_cmd", topics.valve_pack_cmd);
   node->get_parameter("topics.valve_pack_response", topics.valve_pack_response);
+  node->get_parameter("topics.dither_cmd", topics.dither_cmd);
 
   node->get_parameter("deadband", deadband);
 }
