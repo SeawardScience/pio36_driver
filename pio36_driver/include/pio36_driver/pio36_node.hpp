@@ -2,6 +2,9 @@
 
 #include "blocks/ip_config.hpp"
 #include "blocks/pwm_duty.hpp"
+#include "blocks/pwm_dither_duty.hpp"
+#include "blocks/pwm_dither_frequency.hpp"
+#include "blocks/pwm_dither_phase.hpp"
 #include "blocks/word_buffer.hpp"
 #include "blocks/analog_input_scaled.hpp"
 #include "package_defs.hpp"
@@ -12,6 +15,7 @@
 #include <hydraulic_interfaces/msg/valve_stamped.hpp>
 #include <hydraulic_interfaces/msg/valve_pack.hpp>
 #include <io_interfaces/msg/raw_analog_array.hpp>
+#include <pio36_interfaces/msg/dither_pack.hpp>
 
 
 NS_HEAD  // macro for consistantly defining our namespace for the package
@@ -93,6 +97,12 @@ public:
       std::string valve_pack_cmd = "cmd/valve_pack";        ///< Multi-valve command topic
       std::string valve_pack_response = "resp/valve_pack";  ///< Valve state response topic
     } topics;
+    struct {
+      float duty = 0.0;       ///< Global dither amplitude (0-100%)
+      float frequency = 0.0;  ///< Global dither frequency (Hz)
+      float phase = 0.0;      ///< Global dither phase offset (0-360°)
+    } dither;
+    int lost_comms_timeout = 5;  ///< Lost comms timeout in seconds
     float deadband = 0.01;  ///< Minimum valve setpoint before zeroing (0-1 range)
 
     void declare(rclcpp::Node * node);  ///< Declare ROS parameters
@@ -123,11 +133,17 @@ protected:
   /** @brief Publish valve states and analog voltages */
   void publishResponses();
   
-  /** @brief Configure lost comms timeout and keep-value on connection */
+  /** @brief Configure lost comms, clear alarms, apply global dither to all channels */
   void sendStartupConfig();
+  
+  /** @brief Apply global dither parameters to all PWM channels */
+  void applyDither();
   
   /** @brief Timer callback to establish/maintain Modbus connection */
   void connect();
+  
+  /** @brief Callback for dynamic parameter updates */
+  rcl_interfaces::msg::SetParametersResult onParameterUpdate(const std::vector<rclcpp::Parameter> &params);
   
   /** @brief Decode and log bitmask using bit descriptions */
   void decodeBitmask(uint16_t bitmask, const BitDescription* bits, size_t count, const char* type);
@@ -135,6 +151,8 @@ protected:
   rclcpp::TimerBase::SharedPtr connect_timer_;  ///< Connection retry timer
   rclcpp::TimerBase::SharedPtr poll_timer_;     ///< Input polling timer
   rclcpp::TimerBase::SharedPtr write_timer_;    ///< Output write timer
+  
+  OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;  ///< Dynamic parameter callback handle
   
   bool connected_ = false;      ///< Modbus connection status
   bool connected_warn = true;   ///< Flag to throttle connection warnings
@@ -150,6 +168,13 @@ protected:
     blocks::WordBuffer<103,1> sensor_alarms;        ///< Reg 103: Sensor alarms bitmask
     blocks::WordBuffer<104,1> pwm_faults;           ///< Reg 104: PWM fault status bitmask
     blocks::WordBuffer<1033,1> pwm_ignore_faults;   ///< Reg 1033: PWM fault ignore mask
+    blocks::PwmDitherDuty dither_duty;              ///< Reg 1042-1072: Dither amplitude feedback
+    blocks::PwmDitherFrequency dither_frequency;    ///< Reg 1074-1104: Dither frequency feedback
+    blocks::PwmDitherPhase dither_phase;            ///< Reg 1106-1136: Dither phase feedback
+    blocks::WordBuffer<1034,2> pwm_freq_1_4;        ///< Reg 1034: PWM frequency channels 1-4 (float)
+    blocks::WordBuffer<1036,2> pwm_freq_5_8;        ///< Reg 1036: PWM frequency channels 5-8 (float)
+    blocks::WordBuffer<1038,2> pwm_freq_9_12;       ///< Reg 1038: PWM frequency channels 9-12 (float)
+    blocks::WordBuffer<1040,2> pwm_freq_13_16;      ///< Reg 1040: PWM frequency channels 13-16 (float)
   } poll_blocks_;
   
   /** @brief Modbus holding register blocks (write to device) */
@@ -165,6 +190,9 @@ protected:
     blocks::WordBuffer<103,1> sensor_alarms;        ///< Reg 103: Write 1s to clear sensor alarms
     blocks::WordBuffer<104,1> pwm_faults;           ///< Reg 104: Write 1s to clear corresponding fault bits
     blocks::WordBuffer<1033,1> pwm_ignore_faults;   ///< Reg 1033: Bitmask to enable outputs despite faults
+    blocks::PwmDitherDuty dither_duty;              ///< Reg 1042-1072: Dither amplitude (0-100%)
+    blocks::PwmDitherFrequency dither_frequency;    ///< Reg 1074-1104: Dither frequency (Hz)
+    blocks::PwmDitherPhase dither_phase;            ///< Reg 1106-1136: Dither phase offset (0-360 deg)
   } cmd_blocks_;
   
   /** @brief ROS2 subscriptions */
@@ -177,6 +205,7 @@ protected:
   struct {
     BufferPub<hydraulic_interfaces::msg::ValvePack> valve_state;  ///< PWM duty feedback
     BufferPub<io_interfaces::msg::RawAnalogArray> voltage;        ///< Analog input voltages
+    BufferPub<pio36_interfaces::msg::DitherPack> dither_state;    ///< Dither parameter feedback
   } pubs_;
   
   std::shared_ptr<Modbus> mb_;  ///< Modbus TCP connection handler
