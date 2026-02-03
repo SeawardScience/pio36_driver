@@ -23,9 +23,6 @@ Pio36Node::Pio36Node()
   subs_.valve_pack_ = this->create_subscription<hydraulic_interfaces::msg::ValvePack>(
       params_.topics.valve_pack_cmd, 1, std::bind(&Pio36Node::valvePackCallback, this, _1));
 
-  subs_.dither_ = this->create_subscription<pio36_interfaces::msg::DitherPack>(
-      params_.topics.dither_cmd, 1, std::bind(&Pio36Node::ditherCallback, this, _1));
-
   write_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(params_.timers.write_ms), std::bind(&Pio36Node::writeBuffer, this));
 
@@ -38,11 +35,15 @@ Pio36Node::Pio36Node()
   pubs_.dither_state.setup(this, "dither_state");
   pubs_.dither_state.msg_buff.dithers.resize(blocks::PwmDuty::NUM_PWM_CHANNELS);
 
+  // Register parameter update callback for runtime tuning
+  param_callback_handle_ = this->add_on_set_parameters_callback(
+      std::bind(&Pio36Node::onParameterUpdate, this, std::placeholders::_1));
+
   // initialize commmands with non zero values so they take effect
   cmd_blocks_.eprom_flush.buffer()[0] = 1;
   cmd_blocks_.restart.buffer()[0] = 1;
-  cmd_blocks_.lost_comms_timeout.buffer()[0] = 5;
-  cmd_blocks_.lost_comms_keep_value.buffer()[0] = 0;
+  cmd_blocks_.lost_comms_timeout.buffer()[0] = params_.lost_comms_timeout;
+  cmd_blocks_.lost_comms_keep_value.buffer()[0] = 0; // 0: set outputs to 0 on timeout
   cmd_blocks_.pwm_ignore_faults.buffer()[0] = 0x0000;  // Enable fault detection on all channels
   //cmd_blocks_.sensor_power_config.buffer()[0] = 0x01;  // Bit 0: Ignore sensor power fault
 }
@@ -81,37 +82,26 @@ void Pio36Node::valvePackCallback(const hydraulic_interfaces::msg::ValvePack::Sh
   }
 }
 
-void Pio36Node::ditherCallback(const pio36_interfaces::msg::DitherPack::SharedPtr msg) {
-  RCLCPP_DEBUG(this->get_logger(), "Received dither pack with %zu channels", msg->dithers.size());
-  for (const auto& dither : msg->dithers) {
-    if (dither.channel_id < 1 || dither.channel_id > blocks::PwmDuty::NUM_PWM_CHANNELS) {
-      RCLCPP_WARN_THROTTLE(
-        this->get_logger(), *this->get_clock(), 2000,
-        "Dither channel_id %d out of range (1..%zu). Ignoring.",
-        dither.channel_id, blocks::PwmDuty::NUM_PWM_CHANNELS);
-      continue;
-    }
-    
-    // Set dither parameters for this channel
-    cmd_blocks_.dither_duty.ditherDutyChan(dither.channel_id) = dither.dither_duty;
-    cmd_blocks_.dither_frequency.ditherFreqChan(dither.channel_id) = dither.dither_frequency;
-    cmd_blocks_.dither_phase.ditherPhaseChan(dither.channel_id) = dither.dither_phase;
-    
-    RCLCPP_DEBUG(this->get_logger(), 
-                 "Set channel %d dither: duty=%.2f%%, freq=%.2fHz, phase=%.1f°",
-                 dither.channel_id, dither.dither_duty, dither.dither_frequency, dither.dither_phase);
+void Pio36Node::applyDither() {
+  // Apply global dither settings to all channels
+  for (size_t i = 1; i <= blocks::PwmDuty::NUM_PWM_CHANNELS; i++) {
+    cmd_blocks_.dither_duty.ditherDutyChan(i) = params_.dither.duty;
+    cmd_blocks_.dither_frequency.ditherFreqChan(i) = params_.dither.frequency;
+    cmd_blocks_.dither_phase.ditherPhaseChan(i) = params_.dither.phase;
   }
   
-  // Write dither registers immediately
-  if (connected_) {
-    try {
-      mb_->write_registers(cmd_blocks_.dither_duty);
-      mb_->write_registers(cmd_blocks_.dither_frequency);
-      mb_->write_registers(cmd_blocks_.dither_phase);
-      RCLCPP_DEBUG(this->get_logger(), "Dither parameters written to device");
-    } catch (const std::runtime_error& err) {
-      RCLCPP_WARN(this->get_logger(), "Failed to write dither parameters: %s", err.what());
-    }
+  RCLCPP_INFO(this->get_logger(), 
+               "Applied global dither to all channels: duty=%.2f%%, freq=%.2fHz, phase=%.1f°",
+               params_.dither.duty, params_.dither.frequency, params_.dither.phase);
+  
+  // Write dither registers to device
+  try {
+    mb_->write_registers(cmd_blocks_.dither_duty);
+    mb_->write_registers(cmd_blocks_.dither_frequency);
+    mb_->write_registers(cmd_blocks_.dither_phase);
+  } catch (const std::runtime_error& err) {
+    RCLCPP_WARN(this->get_logger(), "Failed to write dither parameters: %s", err.what());
+    throw;
   }
 }
 
@@ -197,23 +187,6 @@ void Pio36Node::sendStartupConfig()
     RCLCPP_INFO(this->get_logger(), "Board status - Warnings: 0x%04X, Alarms: 0x%04X, PWM Faults: 0x%04X", 
                 warnings, alarms, faults);
     
-    // Read initial PWM frequencies
-    mb_->read_input_registers(poll_blocks_.pwm_freq_1_4);
-    mb_->read_input_registers(poll_blocks_.pwm_freq_5_8);
-    mb_->read_input_registers(poll_blocks_.pwm_freq_9_12);
-    mb_->read_input_registers(poll_blocks_.pwm_freq_13_16);
-    
-    // Convert from big-endian word buffer to float
-    primitives::BE_f32 freq_1_4, freq_5_8, freq_9_12, freq_13_16;
-    std::memcpy(&freq_1_4, poll_blocks_.pwm_freq_1_4.buffer(), sizeof(float));
-    std::memcpy(&freq_5_8, poll_blocks_.pwm_freq_5_8.buffer(), sizeof(float));
-    std::memcpy(&freq_9_12, poll_blocks_.pwm_freq_9_12.buffer(), sizeof(float));
-    std::memcpy(&freq_13_16, poll_blocks_.pwm_freq_13_16.buffer(), sizeof(float));
-    
-    RCLCPP_INFO(this->get_logger(), "PWM Frequencies - Ch1-4: %.1fHz, Ch5-8: %.1fHz, Ch9-12: %.1fHz, Ch13-16: %.1fHz",
-                static_cast<float>(freq_1_4), static_cast<float>(freq_5_8), 
-                static_cast<float>(freq_9_12), static_cast<float>(freq_13_16));
-    
     if (warnings != 0) {
       decodeBitmask(warnings, SYSTEM_WARNING_BITS, 
                     sizeof(SYSTEM_WARNING_BITS)/sizeof(SYSTEM_WARNING_BITS[0]), "System Warning");
@@ -227,6 +200,9 @@ void Pio36Node::sendStartupConfig()
     cmd_blocks_.sensor_alarms.buffer()[0] = 0xFFFF;
     mb_->write_registers(cmd_blocks_.sensor_alarms);
     RCLCPP_INFO(this->get_logger(), "Cleared sensor alarms");
+    
+    // Apply global dither configuration to all channels
+    applyDither();
 
     RCLCPP_INFO(this->get_logger(), "PIO36 initialization complete");
   } catch (const std::runtime_error& err) {
@@ -283,8 +259,13 @@ void Pio36Node::Params::declare(rclcpp::Node *node)
   node->declare_parameter("topics.valve_cmd", topics.valve_cmd);
   node->declare_parameter("topics.valve_pack_cmd", topics.valve_pack_cmd);
   node->declare_parameter("topics.valve_pack_response", topics.valve_pack_response);
-  node->declare_parameter("topics.dither_cmd", topics.dither_cmd);
 
+  // Declare global dither parameters
+  node->declare_parameter("dither.duty", dither.duty);
+  node->declare_parameter("dither.frequency", dither.frequency);
+  node->declare_parameter("dither.phase", dither.phase);
+
+  node->declare_parameter("lost_comms_timeout", lost_comms_timeout);
   node->declare_parameter("deadband", deadband);
 }
 
@@ -304,8 +285,13 @@ void Pio36Node::Params::update(rclcpp::Node *node)
   node->get_parameter("topics.valve_cmd", topics.valve_cmd);
   node->get_parameter("topics.valve_pack_cmd", topics.valve_pack_cmd);
   node->get_parameter("topics.valve_pack_response", topics.valve_pack_response);
-  node->get_parameter("topics.dither_cmd", topics.dither_cmd);
 
+  // Update global dither parameters
+  node->get_parameter("dither.duty", dither.duty);
+  node->get_parameter("dither.frequency", dither.frequency);
+  node->get_parameter("dither.phase", dither.phase);
+
+  node->get_parameter("lost_comms_timeout", lost_comms_timeout);
   node->get_parameter("deadband", deadband);
 }
 
@@ -315,6 +301,80 @@ void Pio36Node::decodeBitmask(uint16_t bitmask, const BitDescription* bits, size
       RCLCPP_WARN(this->get_logger(), "%s: %s", type, bits[i].description);
     }
   }
+}
+
+rcl_interfaces::msg::SetParametersResult Pio36Node::onParameterUpdate(
+    const std::vector<rclcpp::Parameter> &params) {
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+  result.reason = "Success";
+  
+  bool dither_changed = false;
+  bool lost_comms_changed = false;
+
+  for (const auto &param : params) {
+    try {
+      const std::string &param_name = param.get_name();
+
+      // Handle dither parameters
+      if (param_name == "dither.duty") {
+        float new_duty = param.as_double();
+        if (new_duty < 0.0 || new_duty > 100.0) {
+          result.successful = false;
+          result.reason = "dither.duty must be between 0 and 100%";
+          RCLCPP_WARN(this->get_logger(), "Rejected dither.duty=%.2f (out of range 0-100%%)", new_duty);
+          continue;
+        }
+        params_.dither.duty = new_duty;
+        dither_changed = true;
+        RCLCPP_INFO(this->get_logger(), "Updated dither.duty to %.2f%%", new_duty);
+      }
+      else if (param_name == "dither.frequency") {
+        float new_freq = param.as_double();
+        if (new_freq < 0.0 || new_freq > 250.0) {
+          result.successful = false;
+          result.reason = "dither.frequency must be between 0 and 250 Hz (Nyquist limit)";
+          RCLCPP_WARN(this->get_logger(), "Rejected dither.frequency=%.2f (out of range 0-250Hz)", new_freq);
+          continue;
+        }
+        params_.dither.frequency = new_freq;
+        dither_changed = true;
+        RCLCPP_INFO(this->get_logger(), "Updated dither.frequency to %.2fHz", new_freq);
+      }
+      else if (param_name == "dither.phase") {
+        float new_phase = param.as_double();
+        if (new_phase < 0.0 || new_phase > 360.0) {
+          result.successful = false;
+          result.reason = "dither.phase must be between 0 and 360 degrees";
+          RCLCPP_WARN(this->get_logger(), "Rejected dither.phase=%.2f (out of range 0-360°)", new_phase);
+          continue;
+        }
+        params_.dither.phase = new_phase;
+        dither_changed = true;
+        RCLCPP_INFO(this->get_logger(), "Updated dither.phase to %.1f°", new_phase);
+      }
+
+    } catch (const std::exception &e) {
+      result.successful = false;
+      result.reason = std::string("Failed to update parameter: ") + e.what();
+      RCLCPP_ERROR(this->get_logger(), "Parameter update exception: %s", e.what());
+    }
+  }
+  
+  // Apply changes to device if connected
+  if (connected_ && result.successful) {
+    try {
+      if (dither_changed) {
+        applyDither();
+      }
+    } catch (const std::runtime_error& err) {
+      result.successful = false;
+      result.reason = std::string("Failed to write to device: ") + err.what();
+      RCLCPP_ERROR(this->get_logger(), "Failed to apply parameter changes to device: %s", err.what());
+    }
+  }
+
+  return result;
 }
 
 NS_FOOT

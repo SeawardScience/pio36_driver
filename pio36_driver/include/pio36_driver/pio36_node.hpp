@@ -96,8 +96,13 @@ public:
       std::string valve_cmd = "/odysseus4k/control/valve";  ///< Single valve command topic
       std::string valve_pack_cmd = "cmd/valve_pack";        ///< Multi-valve command topic
       std::string valve_pack_response = "resp/valve_pack";  ///< Valve state response topic
-      std::string dither_cmd = "cmd/dither";                ///< Dither parameter command topic
     } topics;
+    struct {
+      float duty = 0.0;       ///< Global dither amplitude (0-100%)
+      float frequency = 0.0;  ///< Global dither frequency (Hz)
+      float phase = 0.0;      ///< Global dither phase offset (0-360°)
+    } dither;
+    int lost_comms_timeout = 5;  ///< Lost comms timeout in seconds
     float deadband = 0.01;  ///< Minimum valve setpoint before zeroing (0-1 range)
 
     void declare(rclcpp::Node * node);  ///< Declare ROS parameters
@@ -112,9 +117,6 @@ public:
   
   /** @brief Callback for multi-valve commands */
   void valvePackCallback(const hydraulic_interfaces::msg::ValvePack::SharedPtr msg);
-  
-  /** @brief Callback for dither parameter commands */
-  void ditherCallback(const pio36_interfaces::msg::DitherPack::SharedPtr msg);
   
   /** @brief Timer callback to write PWM duty registers */
   void writeBuffer();
@@ -131,11 +133,17 @@ protected:
   /** @brief Publish valve states and analog voltages */
   void publishResponses();
   
-  /** @brief Configure lost comms timeout and keep-value on connection */
+  /** @brief Configure lost comms, clear alarms, apply global dither to all channels */
   void sendStartupConfig();
+  
+  /** @brief Apply global dither parameters to all PWM channels */
+  void applyDither();
   
   /** @brief Timer callback to establish/maintain Modbus connection */
   void connect();
+  
+  /** @brief Callback for dynamic parameter updates */
+  rcl_interfaces::msg::SetParametersResult onParameterUpdate(const std::vector<rclcpp::Parameter> &params);
   
   /** @brief Decode and log bitmask using bit descriptions */
   void decodeBitmask(uint16_t bitmask, const BitDescription* bits, size_t count, const char* type);
@@ -143,6 +151,8 @@ protected:
   rclcpp::TimerBase::SharedPtr connect_timer_;  ///< Connection retry timer
   rclcpp::TimerBase::SharedPtr poll_timer_;     ///< Input polling timer
   rclcpp::TimerBase::SharedPtr write_timer_;    ///< Output write timer
+  
+  OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;  ///< Dynamic parameter callback handle
   
   bool connected_ = false;      ///< Modbus connection status
   bool connected_warn = true;   ///< Flag to throttle connection warnings
@@ -189,7 +199,6 @@ protected:
   struct {
     rclcpp::Subscription<hydraulic_interfaces::msg::ValveStamped>::SharedPtr valve_;
     rclcpp::Subscription<hydraulic_interfaces::msg::ValvePack>::SharedPtr valve_pack_;
-    rclcpp::Subscription<pio36_interfaces::msg::DitherPack>::SharedPtr dither_;
   } subs_;
   
   /** @brief ROS2 publishers */
