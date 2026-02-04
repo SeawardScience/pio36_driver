@@ -35,6 +35,8 @@ Pio36Node::Pio36Node()
   pubs_.dither_state.setup(this, "dither_state");
   pubs_.dither_state.msg_buff.dithers.resize(blocks::PwmDuty::NUM_PWM_CHANNELS);
 
+  pubs_.diagnostics.setup(this, "diagnostics");
+
   // Register parameter update callback for runtime tuning
   param_callback_handle_ = this->add_on_set_parameters_callback(
       std::bind(&Pio36Node::onParameterUpdate, this, std::placeholders::_1));
@@ -49,7 +51,7 @@ Pio36Node::Pio36Node()
 }
 
 void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve) {
-  if (valve.valve_id < 1 || valve.valve_id > blocks::PwmDuty::NUM_PWM_CHANNELS) {
+  if (valve.valve_id < 1 || static_cast<size_t>(valve.valve_id) > blocks::PwmDuty::NUM_PWM_CHANNELS) {
     RCLCPP_WARN_THROTTLE(
       this->get_logger(), *this->get_clock(), 2000,
       "Valve id %u out of range (1..%zu). Ignoring command.",
@@ -128,7 +130,13 @@ void Pio36Node::poll() {
       mb_->read_input_registers(poll_blocks_.dither_duty);
       mb_->read_input_registers(poll_blocks_.dither_frequency);
       mb_->read_input_registers(poll_blocks_.dither_phase);
+      
+      // Read diagnostics for continuous monitoring
+      mb_->read_input_registers(poll_blocks_.system_warnings);
+      mb_->read_input_registers(poll_blocks_.sensor_alarms);
+      
       publishResponses();
+      publishDiagnostics();
     } catch (const std::runtime_error& err) {
       std::string error_msg = err.what();
       RCLCPP_WARN(this->get_logger(), "modbus read failed: %s", error_msg.c_str());
@@ -162,6 +170,91 @@ void Pio36Node::publishResponses() {
     dither.dither_phase = static_cast<float>(poll_blocks_.dither_phase.ditherPhaseChan(i));
   }
   pubs_.dither_state.publish();
+}
+
+void Pio36Node::publishDiagnostics() {
+  uint16_t warnings = poll_blocks_.system_warnings.buffer()[0];
+  uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0];
+  
+  // Only publish if diagnostics changed
+  if (warnings == prev_warnings_ && alarms == prev_alarms_) {
+    return;
+  }
+  
+  // Log changes
+  if (warnings != prev_warnings_) {
+    RCLCPP_INFO(this->get_logger(), "System Warnings changed: 0x%04X -> 0x%04X", prev_warnings_, warnings);
+    if (warnings != 0) {
+      decodeBitmask(warnings, SYSTEM_WARNING_BITS, 
+                    sizeof(SYSTEM_WARNING_BITS)/sizeof(SYSTEM_WARNING_BITS[0]), "System Warning");
+    }
+  }
+  if (alarms != prev_alarms_) {
+    RCLCPP_INFO(this->get_logger(), "Sensor Alarms changed: 0x%04X -> 0x%04X", prev_alarms_, alarms);
+    if (alarms != 0) {
+      decodeBitmask(alarms, SENSOR_ALARM_BITS, 
+                    sizeof(SENSOR_ALARM_BITS)/sizeof(SENSOR_ALARM_BITS[0]), "Sensor Alarm");
+    }
+  }
+  
+  // Update previous state
+  prev_warnings_ = warnings;
+  prev_alarms_ = alarms;
+  
+  // Build DiagnosticArray message
+  pubs_.diagnostics.msg_buff.status.clear();
+  pubs_.diagnostics.msg_buff.header.stamp = this->now();
+  
+  // System Warnings Status
+  diagnostic_msgs::msg::DiagnosticStatus warning_status;
+  warning_status.name = "PIO36 System Warnings";
+  warning_status.hardware_id = params_.connection.ip;
+  
+  if (warnings == 0) {
+    warning_status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+    warning_status.message = "No system warnings";
+  } else {
+    warning_status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+    warning_status.message = "System warnings detected";
+    
+    // Add detailed key-value pairs
+    for (size_t i = 0; i < sizeof(SYSTEM_WARNING_BITS)/sizeof(SYSTEM_WARNING_BITS[0]); i++) {
+      if (warnings & (1 << SYSTEM_WARNING_BITS[i].bit)) {
+        diagnostic_msgs::msg::KeyValue kv;
+        kv.key = std::string("Bit ") + std::to_string(SYSTEM_WARNING_BITS[i].bit);
+        kv.value = SYSTEM_WARNING_BITS[i].description;
+        warning_status.values.push_back(kv);
+      }
+    }
+  }
+  pubs_.diagnostics.msg_buff.status.push_back(warning_status);
+  
+  // Sensor Alarms Status
+  diagnostic_msgs::msg::DiagnosticStatus alarm_status;
+  alarm_status.name = "PIO36 Sensor Alarms";
+  alarm_status.hardware_id = params_.connection.ip;
+  
+  if (alarms == 0) {
+    alarm_status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+    alarm_status.message = "No sensor alarms";
+  } else {
+    alarm_status.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
+    alarm_status.message = "Sensor alarms detected";
+    
+    // Add detailed key-value pairs
+    for (size_t i = 0; i < sizeof(SENSOR_ALARM_BITS)/sizeof(SENSOR_ALARM_BITS[0]); i++) {
+      if (alarms & (1 << SENSOR_ALARM_BITS[i].bit)) {
+        diagnostic_msgs::msg::KeyValue kv;
+        kv.key = std::string("Bit ") + std::to_string(SENSOR_ALARM_BITS[i].bit);
+        kv.value = SENSOR_ALARM_BITS[i].description;
+        alarm_status.values.push_back(kv);
+      }
+    }
+  }
+  pubs_.diagnostics.msg_buff.status.push_back(alarm_status);
+  
+  // Publish diagnostic array
+  pubs_.diagnostics.publish();
 }
 
 void Pio36Node::sendStartupConfig()
@@ -310,7 +403,6 @@ rcl_interfaces::msg::SetParametersResult Pio36Node::onParameterUpdate(
   result.reason = "Success";
   
   bool dither_changed = false;
-  bool lost_comms_changed = false;
 
   for (const auto &param : params) {
     try {

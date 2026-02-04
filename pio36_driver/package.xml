@@ -13,6 +13,7 @@
   <depend> hydraulic_interfaces </depend>
   <depend> io_interfaces </depend>
   <depend> pio36_interfaces </depend>
+  <depend> diagnostic_msgs </depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

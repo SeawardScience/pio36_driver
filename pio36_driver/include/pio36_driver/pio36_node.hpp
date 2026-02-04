@@ -16,6 +16,8 @@
 #include <hydraulic_interfaces/msg/valve_pack.hpp>
 #include <io_interfaces/msg/raw_analog_array.hpp>
 #include <pio36_interfaces/msg/dither_pack.hpp>
+#include <diagnostic_msgs/msg/diagnostic_array.hpp>
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
 
 
 NS_HEAD  // macro for consistantly defining our namespace for the package
@@ -148,6 +150,9 @@ protected:
   /** @brief Decode and log bitmask using bit descriptions */
   void decodeBitmask(uint16_t bitmask, const BitDescription* bits, size_t count, const char* type);
   
+  /** @brief Publish diagnostic status messages */
+  void publishDiagnostics();
+  
   rclcpp::TimerBase::SharedPtr connect_timer_;  ///< Connection retry timer
   rclcpp::TimerBase::SharedPtr poll_timer_;     ///< Input polling timer
   rclcpp::TimerBase::SharedPtr write_timer_;    ///< Output write timer
@@ -156,6 +161,10 @@ protected:
   
   bool connected_ = false;      ///< Modbus connection status
   bool connected_warn = true;   ///< Flag to throttle connection warnings
+  
+  // Previous diagnostic state for change detection
+  uint16_t prev_warnings_ = 0;  ///< Previous system warnings bitmask
+  uint16_t prev_alarms_ = 0;    ///< Previous sensor alarms bitmask
   
   /** @brief Modbus input register blocks (read from device) */
   struct {
@@ -206,6 +215,7 @@ protected:
     BufferPub<hydraulic_interfaces::msg::ValvePack> valve_state;  ///< PWM duty feedback
     BufferPub<io_interfaces::msg::RawAnalogArray> voltage;        ///< Analog input voltages
     BufferPub<pio36_interfaces::msg::DitherPack> dither_state;    ///< Dither parameter feedback
+    BufferPub<diagnostic_msgs::msg::DiagnosticArray> diagnostics; ///< System diagnostics
   } pubs_;
   
   std::shared_ptr<Modbus> mb_;  ///< Modbus TCP connection handler
