@@ -211,19 +211,7 @@ The PIO36 board uses Modbus TCP with the following register layout:
 
 ## Contributing
 
-Contributions are welcome! When contributing:
-
-- Follow ROS2 coding standards and naming conventions
-- Use `ament_cpplint` to check code style (120 character line length)
-- Add Doxygen comments for new classes and functions
-- Test with actual hardware when possible
-
-```bash
-# Check code style
-cd ~/ros2_ws/src/pio36_driver/pio36_driver
-ament_cpplint src/ include/ --linelength 120
-```
-
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute to this project.
 ---
 
 ## Generating Documentation
