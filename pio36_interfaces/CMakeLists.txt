@@ -7,10 +7,7 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 
 set(MSG_FILES
-    "msg/RawPacket.msg"
-    "msg/Dither.msg"
-    "msg/DitherStamped.msg"
-    "msg/DitherPack.msg")
+    "msg/RawPacket.msg")
 
 rosidl_generate_interfaces(${PROJECT_NAME}
     ${MSG_FILES}

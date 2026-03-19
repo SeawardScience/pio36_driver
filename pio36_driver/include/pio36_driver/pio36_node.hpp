@@ -15,7 +15,6 @@
 #include <hydraulic_interfaces/msg/valve_stamped.hpp>
 #include <hydraulic_interfaces/msg/valve_pack.hpp>
 #include <io_interfaces/msg/raw_analog_array.hpp>
-#include <pio36_interfaces/msg/dither_pack.hpp>
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 
@@ -214,7 +213,6 @@ protected:
   struct {
     BufferPub<hydraulic_interfaces::msg::ValvePack> valve_state;  ///< PWM duty feedback
     BufferPub<io_interfaces::msg::RawAnalogArray> voltage;        ///< Analog input voltages
-    BufferPub<pio36_interfaces::msg::DitherPack> dither_state;    ///< Dither parameter feedback
     BufferPub<diagnostic_msgs::msg::DiagnosticArray> diagnostics; ///< System diagnostics
   } pubs_;
   

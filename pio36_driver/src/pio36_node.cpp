@@ -32,9 +32,6 @@ Pio36Node::Pio36Node()
   pubs_.voltage.setup(this, "analog_input_voltage");
   pubs_.voltage.msg_buff.analogs.resize(blocks::AnalogVoltageInput::NUM_CHANNELS);
 
-  pubs_.dither_state.setup(this, "dither_state");
-  pubs_.dither_state.msg_buff.dithers.resize(blocks::PwmDuty::NUM_PWM_CHANNELS);
-
   pubs_.diagnostics.setup(this, "diagnostics");
 
   // Register parameter update callback for runtime tuning
@@ -92,15 +89,21 @@ void Pio36Node::applyDither() {
     cmd_blocks_.dither_phase.ditherPhaseChan(i) = params_.dither.phase;
   }
   
-  RCLCPP_INFO(this->get_logger(), 
-               "Applied global dither to all channels: duty=%.2f%%, freq=%.2fHz, phase=%.1f°",
-               params_.dither.duty, params_.dither.frequency, params_.dither.phase);
-  
   // Write dither registers to device
   try {
     mb_->write_registers(cmd_blocks_.dither_duty);
     mb_->write_registers(cmd_blocks_.dither_frequency);
     mb_->write_registers(cmd_blocks_.dither_phase);
+
+    // Read back from board to confirm values took effect
+    mb_->read_input_registers(poll_blocks_.dither_duty);
+    mb_->read_input_registers(poll_blocks_.dither_frequency);
+    mb_->read_input_registers(poll_blocks_.dither_phase);
+    RCLCPP_INFO(this->get_logger(),
+                "Dither params confirmed on board (ch1): duty=%.2f%%, freq=%.2fHz, phase=%.1f°",
+                static_cast<double>(poll_blocks_.dither_duty.ditherDutyChan(1)),
+                static_cast<double>(poll_blocks_.dither_frequency.ditherFreqChan(1)),
+                static_cast<double>(poll_blocks_.dither_phase.ditherPhaseChan(1)));
   } catch (const std::runtime_error& err) {
     RCLCPP_WARN(this->get_logger(), "Failed to write dither parameters: %s", err.what());
     throw;
@@ -127,10 +130,7 @@ void Pio36Node::poll() {
     try {
       mb_->read_input_registers(poll_blocks_.pwm_duty);
       mb_->read_input_registers(poll_blocks_.analog_inputs);
-      mb_->read_input_registers(poll_blocks_.dither_duty);
-      mb_->read_input_registers(poll_blocks_.dither_frequency);
-      mb_->read_input_registers(poll_blocks_.dither_phase);
-      
+
       // Read diagnostics for continuous monitoring
       mb_->read_input_registers(poll_blocks_.system_warnings);
       mb_->read_input_registers(poll_blocks_.sensor_alarms);
@@ -159,17 +159,6 @@ void Pio36Node::publishResponses() {
     pubs_.voltage.msg_buff.analogs[i-1].channel_id = i;
   }
   pubs_.voltage.publish();
-  
-  pubs_.dither_state.msg_buff.header.stamp = this->now();
-  pubs_.dither_state.msg_buff.header.frame_id = "";
-  for (size_t i = 1; i <= blocks::PwmDuty::NUM_PWM_CHANNELS; i++) {
-    auto& dither = pubs_.dither_state.msg_buff.dithers[i-1];
-    dither.channel_id = i;
-    dither.dither_duty = static_cast<float>(poll_blocks_.dither_duty.ditherDutyChan(i));
-    dither.dither_frequency = static_cast<float>(poll_blocks_.dither_frequency.ditherFreqChan(i));
-    dither.dither_phase = static_cast<float>(poll_blocks_.dither_phase.ditherPhaseChan(i));
-  }
-  pubs_.dither_state.publish();
 }
 
 void Pio36Node::publishDiagnostics() {
@@ -419,7 +408,6 @@ rcl_interfaces::msg::SetParametersResult Pio36Node::onParameterUpdate(
         }
         params_.dither.duty = new_duty;
         dither_changed = true;
-        RCLCPP_INFO(this->get_logger(), "Updated dither.duty to %.2f%%", new_duty);
       }
       else if (param_name == "dither.frequency") {
         float new_freq = param.as_double();
@@ -431,7 +419,6 @@ rcl_interfaces::msg::SetParametersResult Pio36Node::onParameterUpdate(
         }
         params_.dither.frequency = new_freq;
         dither_changed = true;
-        RCLCPP_INFO(this->get_logger(), "Updated dither.frequency to %.2fHz", new_freq);
       }
       else if (param_name == "dither.phase") {
         float new_phase = param.as_double();
@@ -443,7 +430,6 @@ rcl_interfaces::msg::SetParametersResult Pio36Node::onParameterUpdate(
         }
         params_.dither.phase = new_phase;
         dither_changed = true;
-        RCLCPP_INFO(this->get_logger(), "Updated dither.phase to %.1f°", new_phase);
       }
 
     } catch (const std::exception &e) {
