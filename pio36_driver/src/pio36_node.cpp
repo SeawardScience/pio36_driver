@@ -25,6 +25,7 @@ Pio36Node::Pio36Node()
 
   write_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(params_.timers.write_ms), std::bind(&Pio36Node::writeBuffer, this));
+  diagnostics_timer_ = this->create_wall_timer(1000ms, std::bind(&Pio36Node::publishDiagnostics, this));
 
   pubs_.valve_state.setup(this, "valve_state");
   pubs_.valve_state.msg_buff.valves.resize(blocks::PwmDuty::NUM_PWM_CHANNELS);
@@ -136,7 +137,6 @@ void Pio36Node::poll() {
       mb_->read_input_registers(poll_blocks_.sensor_alarms);
       
       publishResponses();
-      publishDiagnostics();
     } catch (const std::runtime_error& err) {
       std::string error_msg = err.what();
       RCLCPP_WARN(this->get_logger(), "modbus read failed: %s", error_msg.c_str());
@@ -164,11 +164,6 @@ void Pio36Node::publishResponses() {
 void Pio36Node::publishDiagnostics() {
   uint16_t warnings = poll_blocks_.system_warnings.buffer()[0];
   uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0];
-  
-  // Only publish if diagnostics changed
-  if (warnings == prev_warnings_ && alarms == prev_alarms_) {
-    return;
-  }
   
   // Log changes
   if (warnings != prev_warnings_) {

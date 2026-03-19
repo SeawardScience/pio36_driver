@@ -155,6 +155,7 @@ protected:
   rclcpp::TimerBase::SharedPtr connect_timer_;  ///< Connection retry timer
   rclcpp::TimerBase::SharedPtr poll_timer_;     ///< Input polling timer
   rclcpp::TimerBase::SharedPtr write_timer_;    ///< Output write timer
+  rclcpp::TimerBase::SharedPtr diagnostics_timer_;     ///< Diagnostics publish timer
   
   OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;  ///< Dynamic parameter callback handle
   
