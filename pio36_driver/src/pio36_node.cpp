@@ -8,7 +8,7 @@ using std::placeholders::_1;
 NS_HEAD
 
 Pio36Node::Pio36Node()
-    : Node("pio36")
+    : Node("pio36"), diagnostics_updater_(this)
 {
   params_.declare(this);
   params_.update(this);
@@ -25,7 +25,6 @@ Pio36Node::Pio36Node()
 
   write_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(params_.timers.write_ms), std::bind(&Pio36Node::writeBuffer, this));
-  diagnostics_timer_ = this->create_wall_timer(1000ms, std::bind(&Pio36Node::publishDiagnostics, this));
 
   pubs_.valve_state.setup(this, "valve_state");
   pubs_.valve_state.msg_buff.valves.resize(blocks::PwmDuty::NUM_PWM_CHANNELS);
@@ -33,7 +32,9 @@ Pio36Node::Pio36Node()
   pubs_.voltage.setup(this, "analog_input_voltage");
   pubs_.voltage.msg_buff.analogs.resize(blocks::AnalogVoltageInput::NUM_CHANNELS);
 
-  pubs_.diagnostics.setup(this, "diagnostics");
+  diagnostics_updater_.setHardwareID("Innova PIO36 @" + params_.connection.ip);
+  diagnostics_updater_.add("System Warnings", this, &Pio36Node::checkSystemWarnings);
+  diagnostics_updater_.add("Sensor Alarms",   this, &Pio36Node::checkSensorAlarms);
 
   // Register parameter update callback for runtime tuning
   param_callback_handle_ = this->add_on_set_parameters_callback(
@@ -161,84 +162,52 @@ void Pio36Node::publishResponses() {
   pubs_.voltage.publish();
 }
 
-void Pio36Node::publishDiagnostics() {
+void Pio36Node::checkSystemWarnings(diagnostic_updater::DiagnosticStatusWrapper & status) {
   uint16_t warnings = poll_blocks_.system_warnings.buffer()[0];
-  uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0];
-  
-  // Log changes
+
   if (warnings != prev_warnings_) {
     RCLCPP_INFO(this->get_logger(), "System Warnings changed: 0x%04X -> 0x%04X", prev_warnings_, warnings);
     if (warnings != 0) {
-      decodeBitmask(warnings, SYSTEM_WARNING_BITS, 
-                    sizeof(SYSTEM_WARNING_BITS)/sizeof(SYSTEM_WARNING_BITS[0]), "System Warning");
+      decodeBitmask(warnings, SYSTEM_WARNING_BITS, std::size(SYSTEM_WARNING_BITS), "System Warning");
+    }
+    prev_warnings_ = warnings;
+  }
+
+  if (warnings == 0) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "No system warnings");
+  } else {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::WARN, "System warnings detected");
+    for (size_t i = 0; i < std::size(SYSTEM_WARNING_BITS); i++) {
+      if (warnings & (1 << SYSTEM_WARNING_BITS[i].bit)) {
+        status.add(std::string("Bit ") + std::to_string(SYSTEM_WARNING_BITS[i].bit),
+                   std::string(SYSTEM_WARNING_BITS[i].description));
+      }
     }
   }
+}
+
+void Pio36Node::checkSensorAlarms(diagnostic_updater::DiagnosticStatusWrapper & status) {
+  uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0];
+
   if (alarms != prev_alarms_) {
     RCLCPP_INFO(this->get_logger(), "Sensor Alarms changed: 0x%04X -> 0x%04X", prev_alarms_, alarms);
     if (alarms != 0) {
-      decodeBitmask(alarms, SENSOR_ALARM_BITS, 
-                    sizeof(SENSOR_ALARM_BITS)/sizeof(SENSOR_ALARM_BITS[0]), "Sensor Alarm");
+      decodeBitmask(alarms, SENSOR_ALARM_BITS, std::size(SENSOR_ALARM_BITS), "Sensor Alarm");
     }
+    prev_alarms_ = alarms;
   }
-  
-  // Update previous state
-  prev_warnings_ = warnings;
-  prev_alarms_ = alarms;
-  
-  // Build DiagnosticArray message
-  pubs_.diagnostics.msg_buff.status.clear();
-  pubs_.diagnostics.msg_buff.header.stamp = this->now();
-  
-  // System Warnings Status
-  diagnostic_msgs::msg::DiagnosticStatus warning_status;
-  warning_status.name = "PIO36 System Warnings";
-  warning_status.hardware_id = params_.connection.ip;
-  
-  if (warnings == 0) {
-    warning_status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
-    warning_status.message = "No system warnings";
-  } else {
-    warning_status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
-    warning_status.message = "System warnings detected";
-    
-    // Add detailed key-value pairs
-    for (size_t i = 0; i < sizeof(SYSTEM_WARNING_BITS)/sizeof(SYSTEM_WARNING_BITS[0]); i++) {
-      if (warnings & (1 << SYSTEM_WARNING_BITS[i].bit)) {
-        diagnostic_msgs::msg::KeyValue kv;
-        kv.key = std::string("Bit ") + std::to_string(SYSTEM_WARNING_BITS[i].bit);
-        kv.value = SYSTEM_WARNING_BITS[i].description;
-        warning_status.values.push_back(kv);
-      }
-    }
-  }
-  pubs_.diagnostics.msg_buff.status.push_back(warning_status);
-  
-  // Sensor Alarms Status
-  diagnostic_msgs::msg::DiagnosticStatus alarm_status;
-  alarm_status.name = "PIO36 Sensor Alarms";
-  alarm_status.hardware_id = params_.connection.ip;
-  
+
   if (alarms == 0) {
-    alarm_status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
-    alarm_status.message = "No sensor alarms";
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::OK, "No sensor alarms");
   } else {
-    alarm_status.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
-    alarm_status.message = "Sensor alarms detected";
-    
-    // Add detailed key-value pairs
-    for (size_t i = 0; i < sizeof(SENSOR_ALARM_BITS)/sizeof(SENSOR_ALARM_BITS[0]); i++) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "Sensor alarms detected");
+    for (size_t i = 0; i < std::size(SENSOR_ALARM_BITS); i++) {
       if (alarms & (1 << SENSOR_ALARM_BITS[i].bit)) {
-        diagnostic_msgs::msg::KeyValue kv;
-        kv.key = std::string("Bit ") + std::to_string(SENSOR_ALARM_BITS[i].bit);
-        kv.value = SENSOR_ALARM_BITS[i].description;
-        alarm_status.values.push_back(kv);
+        status.add(std::string("Bit ") + std::to_string(SENSOR_ALARM_BITS[i].bit),
+                   std::string(SENSOR_ALARM_BITS[i].description));
       }
     }
   }
-  pubs_.diagnostics.msg_buff.status.push_back(alarm_status);
-  
-  // Publish diagnostic array
-  pubs_.diagnostics.publish();
 }
 
 void Pio36Node::sendStartupConfig()

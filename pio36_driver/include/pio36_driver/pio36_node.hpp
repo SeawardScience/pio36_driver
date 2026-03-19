@@ -15,8 +15,7 @@
 #include <hydraulic_interfaces/msg/valve_stamped.hpp>
 #include <hydraulic_interfaces/msg/valve_pack.hpp>
 #include <io_interfaces/msg/raw_analog_array.hpp>
-#include <diagnostic_msgs/msg/diagnostic_array.hpp>
-#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_updater/diagnostic_updater.hpp>
 
 
 NS_HEAD  // macro for consistantly defining our namespace for the package
@@ -148,14 +147,18 @@ protected:
   
   /** @brief Decode and log bitmask using bit descriptions */
   void decodeBitmask(uint16_t bitmask, const BitDescription* bits, size_t count, const char* type);
-  
-  /** @brief Publish diagnostic status messages */
-  void publishDiagnostics();
+
+  /** @brief diagnostic_updater callback for system warnings register */
+  void checkSystemWarnings(diagnostic_updater::DiagnosticStatusWrapper & status);
+
+  /** @brief diagnostic_updater callback for sensor alarms register */
+  void checkSensorAlarms(diagnostic_updater::DiagnosticStatusWrapper & status);
   
   rclcpp::TimerBase::SharedPtr connect_timer_;  ///< Connection retry timer
   rclcpp::TimerBase::SharedPtr poll_timer_;     ///< Input polling timer
   rclcpp::TimerBase::SharedPtr write_timer_;    ///< Output write timer
-  rclcpp::TimerBase::SharedPtr diagnostics_timer_;     ///< Diagnostics publish timer
+
+  diagnostic_updater::Updater diagnostics_updater_;  ///< Publishes /diagnostics at 1Hz
   
   OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;  ///< Dynamic parameter callback handle
   
@@ -214,7 +217,6 @@ protected:
   struct {
     BufferPub<hydraulic_interfaces::msg::ValvePack> valve_state;  ///< PWM duty feedback
     BufferPub<io_interfaces::msg::RawAnalogArray> voltage;        ///< Analog input voltages
-    BufferPub<diagnostic_msgs::msg::DiagnosticArray> diagnostics; ///< System diagnostics
   } pubs_;
   
   std::shared_ptr<Modbus> mb_;  ///< Modbus TCP connection handler

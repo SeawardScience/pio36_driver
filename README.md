@@ -82,7 +82,7 @@ The main driver node that communicates with the PIO36 board via Modbus TCP, conv
 |------------------------|---------------------------------------|-------------------------------------|
 | `~/valve_state`        | `hydraulic_interfaces::msg::ValvePack`| PWM duty cycle feedback (0-1 range)|
 | `~/analog_input_voltage`| `io_interfaces::msg::RawAnalogArray` | Analog input voltages (0-10V)      |
-| `~/dither_state`       | `pio36_interfaces::msg::DitherPack`   | Dither parameter feedback (all channels)|
+| `/diagnostics`        | `diagnostic_msgs::msg::DiagnosticArray` | System warnings and sensor alarms |
 
 #### Subscribed Topics
 

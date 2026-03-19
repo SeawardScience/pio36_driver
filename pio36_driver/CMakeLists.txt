@@ -11,7 +11,7 @@ set(ROS_DEPENDS
     hydraulic_interfaces
     io_interfaces
     pio36_interfaces
-    diagnostic_msgs
+    diagnostic_updater
   )
 
 set(EXTERNAL_DEPENDS
