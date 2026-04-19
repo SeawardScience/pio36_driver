@@ -163,6 +163,10 @@ void Pio36Node::publishResponses() {
 }
 
 void Pio36Node::checkSystemWarnings(diagnostic_updater::DiagnosticStatusWrapper & status) {
+  if (!connected_) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::STALE, "No data - disconnected");
+    return;
+  }
   uint16_t warnings = poll_blocks_.system_warnings.buffer()[0];
 
   if (warnings != prev_warnings_) {
@@ -187,6 +191,10 @@ void Pio36Node::checkSystemWarnings(diagnostic_updater::DiagnosticStatusWrapper 
 }
 
 void Pio36Node::checkSensorAlarms(diagnostic_updater::DiagnosticStatusWrapper & status) {
+  if (!connected_) {
+    status.summary(diagnostic_msgs::msg::DiagnosticStatus::STALE, "No data - disconnected");
+    return;
+  }
   uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0];
 
   if (alarms != prev_alarms_) {
