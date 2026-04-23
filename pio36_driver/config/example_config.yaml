@@ -31,6 +31,17 @@
       frequency: 0.0                 # Dither frequency in Hz (0-250, limited by Nyquist)
       phase: 0.0                     # Phase offset in degrees (0-360)
 
+    # Per-channel PWM fault handling
+    pwm:
+      # 1-indexed channel numbers (1..16) whose fault detection should be ignored.
+      # Use this for unused outputs — open-load detection will otherwise raise a
+      # fault on any unloaded channel. Example below ignores channels 12-16.
+      ignore_fault_channels: [12, 13, 14, 15, 16]
+
+    # Sensor power output (dedicated 24V sensor supply, separate from the PWM channels)
+    sensor_power:
+      ignore_fault: false            # Set true to suppress bit 7 "Sensor power fault" when output is unloaded
+
     
     use_sim_time: false
 

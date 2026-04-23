@@ -45,8 +45,9 @@ Pio36Node::Pio36Node()
   cmd_blocks_.restart.buffer()[0] = 1;
   cmd_blocks_.lost_comms_timeout.buffer()[0] = params_.lost_comms_timeout;
   cmd_blocks_.lost_comms_keep_value.buffer()[0] = 0; // 0: set outputs to 0 on timeout
-  cmd_blocks_.pwm_ignore_faults.buffer()[0] = 0x0000;  // Enable fault detection on all channels
-  //cmd_blocks_.sensor_power_config.buffer()[0] = 0x01;  // Bit 0: Ignore sensor power fault
+  cmd_blocks_.pwm_ignore_faults.buffer()[0] = computePwmIgnoreFaultsMask();
+  cmd_blocks_.sensor_power_config.buffer()[0] =
+      params_.sensor_power.ignore_fault ? 0x0001 : 0x0000;  // Bit 0: Ignore sensor power fault (§10.4.13)
 }
 
 void Pio36Node::valveHandler(hydraulic_interfaces::msg::Valve & valve) {
@@ -81,6 +82,30 @@ void Pio36Node::valvePackCallback(const hydraulic_interfaces::msg::ValvePack::Sh
   for (auto valve : msg->valves) {
     valveHandler(valve);
   }
+}
+
+uint16_t Pio36Node::computePwmIgnoreFaultsMask() {
+  uint16_t mask = 0;
+  for (auto ch : params_.pwm.ignore_fault_channels) {
+    if (ch < 1 || ch > static_cast<int64_t>(blocks::PwmDuty::NUM_PWM_CHANNELS)) {
+      RCLCPP_WARN(this->get_logger(),
+                  "pwm.ignore_fault_channels: channel %ld out of range (1..%zu), skipping",
+                  ch, blocks::PwmDuty::NUM_PWM_CHANNELS);
+      continue;
+    }
+    mask |= static_cast<uint16_t>(1u << (ch - 1));
+  }
+  return mask;
+}
+
+void Pio36Node::applyPwmIgnoreFaults() {
+  uint16_t mask = computePwmIgnoreFaultsMask();
+  cmd_blocks_.pwm_ignore_faults.buffer()[0] = mask;
+  mb_->write_registers(cmd_blocks_.pwm_ignore_faults);
+  mb_->read_input_registers(poll_blocks_.pwm_ignore_faults);
+  RCLCPP_INFO(this->get_logger(),
+              "PWM ignore-faults mask set to 0x%04X (confirmed 0x%04X)",
+              mask, poll_blocks_.pwm_ignore_faults.buffer()[0]);
 }
 
 void Pio36Node::applyDither() {
@@ -254,7 +279,18 @@ void Pio36Node::sendStartupConfig()
     cmd_blocks_.sensor_alarms.buffer()[0] = 0xFFFF;
     mb_->write_registers(cmd_blocks_.sensor_alarms);
     RCLCPP_INFO(this->get_logger(), "Cleared sensor alarms");
-    
+
+    // Apply sensor-power configuration (bit 0 = ignore fault) from params
+    mb_->write_registers(cmd_blocks_.sensor_power_config);
+    mb_->read_input_registers(poll_blocks_.sensor_power_config);
+    RCLCPP_INFO(this->get_logger(),
+                "Sensor power config set to 0x%04X (confirmed 0x%04X)",
+                cmd_blocks_.sensor_power_config.buffer()[0],
+                poll_blocks_.sensor_power_config.buffer()[0]);
+
+    // Apply per-channel PWM fault-ignore mask from params
+    applyPwmIgnoreFaults();
+
     // Apply global dither configuration to all channels
     applyDither();
 
@@ -319,6 +355,11 @@ void Pio36Node::Params::declare(rclcpp::Node *node)
   node->declare_parameter("dither.frequency", dither.frequency);
   node->declare_parameter("dither.phase", dither.phase);
 
+  node->declare_parameter<std::vector<int64_t>>(
+      "pwm.ignore_fault_channels", pwm.ignore_fault_channels);
+
+  node->declare_parameter("sensor_power.ignore_fault", sensor_power.ignore_fault);
+
   node->declare_parameter("lost_comms_timeout", lost_comms_timeout);
   node->declare_parameter("deadband", deadband);
 }
@@ -344,6 +385,10 @@ void Pio36Node::Params::update(rclcpp::Node *node)
   node->get_parameter("dither.duty", dither.duty);
   node->get_parameter("dither.frequency", dither.frequency);
   node->get_parameter("dither.phase", dither.phase);
+
+  node->get_parameter("pwm.ignore_fault_channels", pwm.ignore_fault_channels);
+
+  node->get_parameter("sensor_power.ignore_fault", sensor_power.ignore_fault);
 
   node->get_parameter("lost_comms_timeout", lost_comms_timeout);
   node->get_parameter("deadband", deadband);

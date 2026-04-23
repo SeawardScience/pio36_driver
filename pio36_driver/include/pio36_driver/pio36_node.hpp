@@ -102,6 +102,12 @@ public:
       float frequency = 0.0;  ///< Global dither frequency (Hz)
       float phase = 0.0;      ///< Global dither phase offset (0-360°)
     } dither;
+    struct {
+      std::vector<int64_t> ignore_fault_channels;  ///< 1-indexed PWM channels (1..16) to ignore faults on (e.g. unused outputs)
+    } pwm;
+    struct {
+      bool ignore_fault = false;  ///< If true, suppress the sensor-power open/short fault (use when output is unloaded)
+    } sensor_power;
     int lost_comms_timeout = 5;  ///< Lost comms timeout in seconds
     float deadband = 0.01;  ///< Minimum valve setpoint before zeroing (0-1 range)
 
@@ -138,6 +144,12 @@ protected:
   
   /** @brief Apply global dither parameters to all PWM channels */
   void applyDither();
+
+  /** @brief Build the PWM ignore-faults bitmask from params_.pwm.ignore_fault_channels */
+  uint16_t computePwmIgnoreFaultsMask();
+
+  /** @brief Write the PWM ignore-faults register to the device using the current params */
+  void applyPwmIgnoreFaults();
   
   /** @brief Timer callback to establish/maintain Modbus connection */
   void connect();
