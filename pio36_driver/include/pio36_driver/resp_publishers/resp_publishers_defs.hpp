@@ -5,10 +5,10 @@
 ///  Namespace stuff
 ///
 
-#define SECTIONS_NS_HEAD  \
-  NS_HEAD namespace sections {
+#define BLOCKS_NS_HEAD  \
+  NS_HEAD namespace resp_publishers {
 
-#define SECTIONS_NS_FOOT  \
+#define BLOCKS_NS_FOOT  \
   NS_FOOT }
 
 

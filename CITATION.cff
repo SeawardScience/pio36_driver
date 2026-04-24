@@ -4,7 +4,7 @@ authors:
 - family-names: "Krasnosky"
   given-names: "Kristopher"
   orcid: "https://orcid.org/0000-0002-2215-7792"
-title: "Template_Package"
-version: 1.0.0
+title: "pio36_driver"
+version: 0.1.0
 date-released: 2024-01-25
-url: ""
+url: "https://github.com/SeawardScience/pio36_driver"
