@@ -5,6 +5,12 @@
 
 BLOCKS_NS_HEAD
 
+/**
+ * @brief PWM duty cycle register block (Reg 1-36, 16 channels)
+ * 
+ * Each channel stores duty cycle as 32-bit float (0-100%).
+ * Channel numbering matches board labels (1-16, not 0-indexed).
+ */
 class PwmDuty : public Block{
 
 public:
@@ -22,7 +28,7 @@ protected:
 public:
   std::shared_ptr<PwmDuty> SharedPtr;
   PwmDuty(){
-    for (int i = 0; i < BLOCK_SIZE; ++i) {
+    for (size_t i = 0; i < BLOCK_SIZE; ++i) {
       data_.word_buffer[i]=0;
     }};
   primitives::WordBuffer buffer(){return data_.word_buffer;}

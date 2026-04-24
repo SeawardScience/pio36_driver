@@ -5,10 +5,18 @@
 
 BLOCKS_NS_HEAD
 
+/**
+ * @brief Network configuration register block (Reg 45-56)
+ * 
+ * Stores IP address, subnet mask, and default gateway.
+ * Each IPv4 address occupies 2 words (4 bytes).
+ */
 class IpConfig : public Block{
 
 public:
   static const size_t NUM_PWM_CHANNELS = 16;
+  
+  /** @brief IPv4 address storage and conversion */
   struct IPv4 {
     //std::array<uint8_t, 4> octets; // Array to store the octets
     uint8_t octet2;
@@ -16,7 +24,7 @@ public:
     uint8_t octet0;
     uint8_t octet1;
 
-    // Function to set the IPv4 address from a dot-decimal notation string
+    /** @brief Parse IPv4 address from dot-decimal string (e.g., "192.168.1.100") */
     void setFromString(const std::string& ipString) {
       std::istringstream ipStream(ipString);
       int o1, o2, o3, o4; // Temporary variables to store the octets as integers
@@ -31,7 +39,7 @@ public:
         //std::cerr << "Invalid IP format" << std::endl;
       }
     }
-    // Function to convert the IPv4 address to a dot-decimal notation string
+    /** @brief Convert IPv4 address to dot-decimal string */
     std::string toString() const {
       std::ostringstream ipStream;
       ipStream << static_cast<int>(octet0) << "."
@@ -42,6 +50,7 @@ public:
     }
   };
 
+  /** @brief Complete network configuration structure */
   struct IpConfig_t{
     IPv4 ip_addr;
     IPv4 subnet_mask;
@@ -65,6 +74,7 @@ public:
   primitives::WordBuffer buffer(){return data_.word_buffer;}
   size_t size(){return BLOCK_SIZE;}
 
+  /** @brief Access network configuration structure */
   IpConfig_t & data(){return data_.type;}
 
   /*!

@@ -22,10 +22,7 @@ int main(void) {
   uint32_t value = (mb.buffer()[0] << 16) + mb.buffer()[1];
   printf("Combined 32-bit value: %u\n", value);
 
-  //printf("modbus version       : %u\n", modbus_getin);
-
   uint16_t buffer[2];
-  // modbus_set_float_abcd(1.0,buffer);
 
   FloatToUint16  u;
   u.value = 1.0;
@@ -54,36 +51,9 @@ int main(void) {
     std::this_thread::sleep_for(std::chrono::milliseconds(25));
     mb.read_input_registers(1000-1,2);
     mb.print_buffer();
-    // buffer.parts[0]=0;
-    // buffer.parts[0]=0;
     std::cout << modbus_get_float_abcd(mb.buffer()) << std::endl;
-    // buffer.parts[0] = mb.buffer()[0];
-    // buffer.parts[1] = mb.buffer()[1];
     std::this_thread::sleep_for(std::chrono::milliseconds(25));
   }
   return 0;
-  // modbus_t *mb;
-  // uint16_t tab_reg[128];
-
-  // for(size_t i = 0 ; i<32 ; i++){
-  //   tab_reg[i]=0;
-  // }
-
-  // mb = modbus_new_tcp("192.168.52.209", 502);
-  // if (modbus_connect(mb) == -1) {
-  //   fprintf(stderr, "Connection failed: %s\n", modbus_strerror(errno));
-  //   modbus_free(mb);
-  //   return -1;
-  // }
-
-  // if ( modbus_read_input_registers(mb, 2, 2, tab_reg) == -1){
-  //   fprintf(stderr, "failed to read: %s", modbus_strerror(errno));
-  // }
-
-  // uint32_t value = (tab_reg[0] << 16) + tab_reg[1];
-
-  // printf("Combined 32-bit value: %u\n", value);
-  // modbus_close(mb);
-  // modbus_free(mb);
 
 }

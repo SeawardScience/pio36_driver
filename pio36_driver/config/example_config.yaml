@@ -1,3 +1,47 @@
-minimal_publisher:
-    ros__parameters:
-        message:  "Message set through parameter! "
+# PIO36 Driver Configuration
+# Configuration for Innova PIO36 PWM/Analog I/O board over Modbus TCP
+
+/pio36:
+  ros__parameters:
+    # Connection settings
+    connection:
+      type: tcp                      # Connection type (tcp only)
+      ip: 192.168.52.209            # Device IP address
+      network_port: 502              # Modbus TCP port (standard is 502)
+    
+    # Timer intervals (milliseconds)
+    timers:
+      poll_ms: 500                   # Input register polling interval
+      write_ms: 10                   # Output register write interval
+      connect_ms: 1000               # Connection retry interval
+    
+    # ROS topic names
+    topics:
+      valve_cmd: /vessel_ns/control/valve          # Single valve command input
+      valve_pack_cmd: cmd/valve_pack                # Multi-valve command input
+      valve_pack_response: resp/valve_pack          # Valve state feedback output
+    
+    # Control parameters
+    lost_comms_timeout: 5            # Lost communications timeout in seconds
+    deadband: 0.01                   # Minimum valve setpoint (0-1 range) before zeroing
+
+    # Global dither configuration (applied to all channels)
+    dither:
+      duty: 0.0                      # Dither amplitude in % (0-100)
+      frequency: 0.0                 # Dither frequency in Hz (0-250, limited by Nyquist)
+      phase: 0.0                     # Phase offset in degrees (0-360)
+
+    # Per-channel PWM fault handling
+    pwm:
+      # 1-indexed channel numbers (1..16) whose fault detection should be ignored.
+      # Use this for unused outputs — open-load detection will otherwise raise a
+      # fault on any unloaded channel. Example below ignores channels 12-16.
+      ignore_fault_channels: [12, 13, 14, 15, 16]
+
+    # Sensor power output (dedicated 24V sensor supply, separate from the PWM channels)
+    sensor_power:
+      ignore_fault: false            # Set true to suppress bit 7 "Sensor power fault" when output is unloaded
+
+    
+    use_sim_time: false
+

@@ -1,5 +1,16 @@
 # Contributing
 
+- Follow ROS2 coding standards and naming conventions
+- Use `ament_cpplint` to check code style (120 character line length)
+- Add Doxygen comments for new classes and functions
+- Test with actual hardware when possible
+
+```bash
+# Check code style
+cd ~/ros2_ws/src/ixys_driver
+ament_cpplint src/ include/ --linelength 120
+```
+
 ## Branching Strategy
 
 This repository follows the GitFlow Workflow.  If you are not familiar, please review [this article](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow).

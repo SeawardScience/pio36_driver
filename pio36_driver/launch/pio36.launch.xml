@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<launch>
+
+  <arg name="vessel_ns"       default="vessel"/>
+
+  <node pkg="pio36_driver" exec="pio36" name="pio36" namespace="$(var vessel_ns)/control">
+    <param from="$(find-pkg-share pio36_driver)/config/example_config.yaml"/>
+  </node>
+
+</launch>

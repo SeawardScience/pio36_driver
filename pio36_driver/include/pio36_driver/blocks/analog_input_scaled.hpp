@@ -5,6 +5,12 @@
 
 BLOCKS_NS_HEAD
 
+/**
+ * @brief Analog voltage input register block (Reg 37-44, 8 channels)
+ * 
+ * Each channel stores voltage as 32-bit float (0-10V range).
+ * Channel numbering matches board labels (1-8, not 0-indexed).
+ */
 class AnalogVoltageInput : public Block{
 
 public:
@@ -22,13 +28,14 @@ protected:
 public:
   std::shared_ptr<AnalogVoltageInput> SharedPtr;
   AnalogVoltageInput(){
-    for (int i = 0; i < BLOCK_SIZE; ++i) {
+    for (size_t i = 0; i < BLOCK_SIZE; ++i) {
       data_.word_buffer[i]=0;
     }};
   primitives::WordBuffer buffer(){return data_.word_buffer;}
   size_t size(){return BLOCK_SIZE;}
 
-  primitives::BE_f32 & chanel(size_t chan){return data_.type.analog[chan-1];}
+  /** @brief Access analog voltage channel (1-8) */
+  primitives::BE_f32 & channel(size_t chan){return data_.type.analog[chan-1];}
   /*!
    * \brief innovaAddress returns the of the PWM block in the innova documentation
    * \return
