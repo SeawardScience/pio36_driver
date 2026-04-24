@@ -150,6 +150,9 @@ protected:
 
   /** @brief Write the PWM ignore-faults register to the device using the current params */
   void applyPwmIgnoreFaults();
+
+  /** @brief Bitmask of sensor-alarm bits to suppress in ROS diagnostics based on params */
+  uint16_t sensorAlarmIgnoreMask() const;
   
   /** @brief Timer callback to establish/maintain Modbus connection */
   void connect();

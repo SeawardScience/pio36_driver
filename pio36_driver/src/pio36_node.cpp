@@ -108,6 +108,14 @@ void Pio36Node::applyPwmIgnoreFaults() {
               mask, poll_blocks_.pwm_ignore_faults.buffer()[0]);
 }
 
+uint16_t Pio36Node::sensorAlarmIgnoreMask() const {
+  uint16_t mask = 0;
+  if (params_.sensor_power.ignore_fault) {
+    mask |= (1u << 7);  // §10.5.3.8 Sensor power fault
+  }
+  return mask;
+}
+
 void Pio36Node::applyDither() {
   // Apply global dither settings to all channels
   for (size_t i = 1; i <= blocks::PwmDuty::NUM_PWM_CHANNELS; i++) {
@@ -220,7 +228,7 @@ void Pio36Node::checkSensorAlarms(diagnostic_updater::DiagnosticStatusWrapper & 
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::STALE, "No data - disconnected");
     return;
   }
-  uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0];
+  uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0] & ~sensorAlarmIgnoreMask();
 
   if (alarms != prev_alarms_) {
     RCLCPP_INFO(this->get_logger(), "Sensor Alarms changed: 0x%04X -> 0x%04X", prev_alarms_, alarms);
@@ -260,7 +268,7 @@ void Pio36Node::sendStartupConfig()
     mb_->read_input_registers(poll_blocks_.sensor_alarms);
     mb_->read_input_registers(poll_blocks_.pwm_faults);
     uint16_t warnings = poll_blocks_.system_warnings.buffer()[0];
-    uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0];
+    uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0] & ~sensorAlarmIgnoreMask();
     uint16_t faults = poll_blocks_.pwm_faults.buffer()[0];
 
     RCLCPP_INFO(this->get_logger(), "Board status - Warnings: 0x%04X, Alarms: 0x%04X, PWM Faults: 0x%04X", 
