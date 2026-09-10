@@ -82,7 +82,7 @@ The main driver node that communicates with the PIO36 board via Modbus TCP, conv
 |------------------------|---------------------------------------|-------------------------------------|
 | `~/valve_state`        | `hydraulic_interfaces::msg::ValvePack`| PWM duty cycle feedback (0-1 range)|
 | `~/analog_input_voltage`| `io_interfaces::msg::RawAnalogArray` | Analog input voltages (0-10V)      |
-| `/diagnostics`        | `diagnostic_msgs::msg::DiagnosticArray` | System warnings and sensor alarms |
+| `/diagnostics`        | `diagnostic_msgs::msg::DiagnosticArray` | System warnings and sensor alarms, with supply V/A, CPU/Pt100 temperature, alarm limits and water-probe raw ADC |
 
 #### Subscribed Topics
 

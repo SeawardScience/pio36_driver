@@ -169,7 +169,9 @@ void Pio36Node::poll() {
       // Read diagnostics for continuous monitoring
       mb_->read_input_registers(poll_blocks_.system_warnings);
       mb_->read_input_registers(poll_blocks_.sensor_alarms);
-      
+      mb_->read_input_registers(poll_blocks_.onboard_sensors);
+      mb_->read_input_registers(poll_blocks_.water_alarm);
+
       publishResponses();
     } catch (const std::runtime_error& err) {
       std::string error_msg = err.what();
@@ -193,6 +195,20 @@ void Pio36Node::publishResponses() {
     pubs_.voltage.msg_buff.analogs[i-1].channel_id = i;
   }
   pubs_.voltage.publish();
+}
+
+void Pio36Node::addSensorReadings(diagnostic_updater::DiagnosticStatusWrapper & status) {
+  auto & s = poll_blocks_.onboard_sensors;
+  auto * wa = poll_blocks_.water_alarm.buffer();
+  status.addf("Supply voltage (V)", "%.2f", static_cast<double>(s.at(0)));
+  status.addf("Supply current (A)", "%.2f", static_cast<double>(s.at(1)));
+  status.addf("CPU temperature (C)", "%.1f", static_cast<double>(s.at(2)));
+  status.addf("CPU temperature limits (C)", "%.1f / %.1f",
+              static_cast<double>(poll_blocks_.cpu_temp_limits.at(0)),
+              static_cast<double>(poll_blocks_.cpu_temp_limits.at(1)));
+  status.addf("Pt100 temperature (C)", "%.1f", static_cast<double>(s.at(3)));
+  status.addf("Water alarm raw ADC", "%u", wa[0]);
+  status.addf("Water alarm limits", "%u / %u", wa[5], wa[6]);
 }
 
 void Pio36Node::checkSystemWarnings(diagnostic_updater::DiagnosticStatusWrapper & status) {
@@ -249,6 +265,7 @@ void Pio36Node::checkSensorAlarms(diagnostic_updater::DiagnosticStatusWrapper & 
       }
     }
   }
+  addSensorReadings(status);
 }
 
 void Pio36Node::sendStartupConfig()
@@ -267,6 +284,22 @@ void Pio36Node::sendStartupConfig()
     mb_->read_input_registers(poll_blocks_.system_warnings);
     mb_->read_input_registers(poll_blocks_.sensor_alarms);
     mb_->read_input_registers(poll_blocks_.pwm_faults);
+    mb_->read_input_registers(poll_blocks_.onboard_sensors);
+    mb_->read_input_registers(poll_blocks_.water_alarm);
+    mb_->read_input_registers(poll_blocks_.cpu_temp_limits);
+    RCLCPP_INFO(this->get_logger(),
+                "Onboard sensors - supply %.2fV %.2fA, CPU %.1fC (alarm limits %.1f / %.1fC), Pt100 %.1fC",
+                static_cast<double>(poll_blocks_.onboard_sensors.at(0)),
+                static_cast<double>(poll_blocks_.onboard_sensors.at(1)),
+                static_cast<double>(poll_blocks_.onboard_sensors.at(2)),
+                static_cast<double>(poll_blocks_.cpu_temp_limits.at(0)),
+                static_cast<double>(poll_blocks_.cpu_temp_limits.at(1)),
+                static_cast<double>(poll_blocks_.onboard_sensors.at(3)));
+    RCLCPP_INFO(this->get_logger(),
+                "Water alarm - raw ADC %u, limits %u / %u",
+                poll_blocks_.water_alarm.buffer()[0],
+                poll_blocks_.water_alarm.buffer()[5],
+                poll_blocks_.water_alarm.buffer()[6]);
     uint16_t warnings = poll_blocks_.system_warnings.buffer()[0];
     uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0] & ~sensorAlarmIgnoreMask();
     uint16_t faults = poll_blocks_.pwm_faults.buffer()[0];

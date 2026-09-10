@@ -6,6 +6,7 @@
 #include "blocks/pwm_dither_frequency.hpp"
 #include "blocks/pwm_dither_phase.hpp"
 #include "blocks/word_buffer.hpp"
+#include "blocks/float_buffer.hpp"
 #include "blocks/analog_input_scaled.hpp"
 #include "package_defs.hpp"
 #include "modbus.hpp"
@@ -168,7 +169,10 @@ protected:
 
   /** @brief diagnostic_updater callback for sensor alarms register */
   void checkSensorAlarms(diagnostic_updater::DiagnosticStatusWrapper & status);
-  
+
+  /** @brief Append onboard sensor readings and alarm limits to a diagnostic status */
+  void addSensorReadings(diagnostic_updater::DiagnosticStatusWrapper & status);
+
   rclcpp::TimerBase::SharedPtr connect_timer_;  ///< Connection retry timer
   rclcpp::TimerBase::SharedPtr poll_timer_;     ///< Input polling timer
   rclcpp::TimerBase::SharedPtr write_timer_;    ///< Output write timer
@@ -195,6 +199,9 @@ protected:
     blocks::WordBuffer<103,1> sensor_alarms;        ///< Reg 103: Sensor alarms bitmask
     blocks::WordBuffer<104,1> pwm_faults;           ///< Reg 104: PWM fault status bitmask
     blocks::WordBuffer<1033,1> pwm_ignore_faults;   ///< Reg 1033: PWM fault ignore mask
+    blocks::FloatBuffer<2000,4> onboard_sensors;    ///< Reg 2000-2007: supply V, supply A, CPU temp °C, Pt100 °C (§10.8)
+    blocks::WordBuffer<4108,7> water_alarm;         ///< Reg 4108-4114: raw ADC, pin time u32, wait time u32, low/high limit (§10.10.7-10)
+    blocks::FloatBuffer<4123,2> cpu_temp_limits;    ///< Reg 4123-4126: CPU temp low/high alarm limits °C (§10.10.13)
     blocks::PwmDitherDuty dither_duty;              ///< Reg 1042-1072: Dither amplitude feedback
     blocks::PwmDitherFrequency dither_frequency;    ///< Reg 1074-1104: Dither frequency feedback
     blocks::PwmDitherPhase dither_phase;            ///< Reg 1106-1136: Dither phase feedback
