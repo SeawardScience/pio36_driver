@@ -1,6 +1,8 @@
 /** Copyright © 2025 Seaward Science. */
 
 #include "pio36_node.hpp"
+#include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 using namespace std::chrono_literals;
@@ -172,6 +174,7 @@ void Pio36Node::poll() {
       mb_->read_input_registers(poll_blocks_.onboard_sensors);
       mb_->read_input_registers(poll_blocks_.water_alarm);
 
+      autoClearAlarms();
       publishResponses();
     } catch (const std::runtime_error& err) {
       std::string error_msg = err.what();
@@ -209,6 +212,61 @@ void Pio36Node::addSensorReadings(diagnostic_updater::DiagnosticStatusWrapper & 
   status.addf("Pt100 temperature (C)", "%.1f", static_cast<double>(s.at(3)));
   status.addf("Water alarm raw ADC", "%u", wa[0]);
   status.addf("Water alarm limits", "%u / %u", wa[5], wa[6]);
+}
+
+void Pio36Node::autoClearAlarms() {
+  const auto * wa = poll_blocks_.water_alarm.buffer();
+  const float cpu = poll_blocks_.onboard_sensors.at(2).get();
+  const float cpu_low = poll_blocks_.cpu_temp_limits.at(0).get();
+  const float cpu_high = poll_blocks_.cpu_temp_limits.at(1).get();
+  const struct { uint8_t bit; bool in_range; } checks[] = {
+    {0, wa[0] >= wa[5] && wa[0] <= wa[6]},
+    {4, cpu >= cpu_low && cpu <= cpu_high},
+  };
+
+  const auto now = std::chrono::steady_clock::now();
+  const uint16_t alarms = poll_blocks_.sensor_alarms.buffer()[0];
+  // A newly latched bit restarts the hold even if the excursion fell between our samples
+  const uint16_t newly_set = alarms & ~last_raw_alarms_;
+  last_raw_alarms_ = alarms;
+  uint16_t clear_mask = 0;
+  for (const auto & c : checks) {
+    auto & since = in_range_since_[c.bit];
+    if (!c.in_range || (newly_set & (1u << c.bit))) {
+      since.reset();
+    }
+    if (!c.in_range) {
+      continue;
+    }
+    if (!since) {
+      since = now;
+    }
+    if (params_.sensor_alarms.auto_clear_hold_sec > 0.0 && (alarms & (1u << c.bit)) &&
+        std::chrono::duration<double>(now - *since).count() >= params_.sensor_alarms.auto_clear_hold_sec) {
+      clear_mask |= static_cast<uint16_t>(1u << c.bit);
+    }
+  }
+  if (clear_mask == 0) {
+    return;
+  }
+
+  cmd_blocks_.sensor_alarms.buffer()[0] = clear_mask;
+  mb_->write_registers(cmd_blocks_.sensor_alarms);
+  poll_blocks_.sensor_alarms.buffer()[0] = alarms & ~clear_mask;
+  for (const auto & b : SENSOR_ALARM_BITS) {
+    if (clear_mask & (1u << b.bit)) {
+      RCLCPP_INFO(this->get_logger(), "Auto-cleared sensor alarm: %s (reading back in range for %.0fs)",
+                  b.description, params_.sensor_alarms.auto_clear_hold_sec);
+    }
+  }
+}
+
+double Pio36Node::inRangeSeconds(uint8_t bit) const {
+  const auto & since = in_range_since_[bit];
+  if (!since) {
+    return -1.0;
+  }
+  return std::chrono::duration<double>(std::chrono::steady_clock::now() - *since).count();
 }
 
 void Pio36Node::checkSystemWarnings(diagnostic_updater::DiagnosticStatusWrapper & status) {
@@ -260,8 +318,15 @@ void Pio36Node::checkSensorAlarms(diagnostic_updater::DiagnosticStatusWrapper & 
     status.summary(diagnostic_msgs::msg::DiagnosticStatus::ERROR, "Sensor alarms detected");
     for (size_t i = 0; i < std::size(SENSOR_ALARM_BITS); i++) {
       if (alarms & (1 << SENSOR_ALARM_BITS[i].bit)) {
-        status.add(std::string("Bit ") + std::to_string(SENSOR_ALARM_BITS[i].bit),
-                   std::string(SENSOR_ALARM_BITS[i].description));
+        std::string desc = SENSOR_ALARM_BITS[i].description;
+        double in_range = inRangeSeconds(SENSOR_ALARM_BITS[i].bit);
+        if (in_range >= 0.0 && params_.sensor_alarms.auto_clear_hold_sec > 0.0) {
+          char buf[64];
+          std::snprintf(buf, sizeof(buf), " (back in range, auto-clear in %.0fs)",
+                        std::max(0.0, params_.sensor_alarms.auto_clear_hold_sec - in_range));
+          desc += buf;
+        }
+        status.add(std::string("Bit ") + std::to_string(SENSOR_ALARM_BITS[i].bit), desc);
       }
     }
   }
@@ -400,6 +465,7 @@ void Pio36Node::Params::declare(rclcpp::Node *node)
       "pwm.ignore_fault_channels", pwm.ignore_fault_channels);
 
   node->declare_parameter("sensor_power.ignore_fault", sensor_power.ignore_fault);
+  node->declare_parameter("sensor_alarms.auto_clear_hold_sec", sensor_alarms.auto_clear_hold_sec);
 
   node->declare_parameter("lost_comms_timeout", lost_comms_timeout);
   node->declare_parameter("deadband", deadband);
@@ -430,6 +496,7 @@ void Pio36Node::Params::update(rclcpp::Node *node)
   node->get_parameter("pwm.ignore_fault_channels", pwm.ignore_fault_channels);
 
   node->get_parameter("sensor_power.ignore_fault", sensor_power.ignore_fault);
+  node->get_parameter("sensor_alarms.auto_clear_hold_sec", sensor_alarms.auto_clear_hold_sec);
 
   node->get_parameter("lost_comms_timeout", lost_comms_timeout);
   node->get_parameter("deadband", deadband);

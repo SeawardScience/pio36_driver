@@ -13,6 +13,9 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <array>
+#include <chrono>
+#include <optional>
 #include <hydraulic_interfaces/msg/valve_stamped.hpp>
 #include <hydraulic_interfaces/msg/valve_pack.hpp>
 #include <io_interfaces/msg/raw_analog_array.hpp>
@@ -109,6 +112,9 @@ public:
     struct {
       bool ignore_fault = false;  ///< If true, suppress the sensor-power open/short fault (use when output is unloaded)
     } sensor_power;
+    struct {
+      double auto_clear_hold_sec = 60.0;  ///< Clear latched water/CPU-temp alarms once the reading has been back inside the board's limits this long (0 disables)
+    } sensor_alarms;
     int lost_comms_timeout = 5;  ///< Lost comms timeout in seconds
     float deadband = 0.01;  ///< Minimum valve setpoint before zeroing (0-1 range)
 
@@ -172,6 +178,15 @@ protected:
 
   /** @brief Append onboard sensor readings and alarm limits to a diagnostic status */
   void addSensorReadings(diagnostic_updater::DiagnosticStatusWrapper & status);
+
+  /** @brief Track threshold alarms whose reading is back in range and clear them on the board after the hold time */
+  void autoClearAlarms();
+
+  /** @brief Seconds the reading behind an alarm bit has been continuously in range, or -1 if out of range / not tracked */
+  double inRangeSeconds(uint8_t bit) const;
+
+  std::array<std::optional<std::chrono::steady_clock::time_point>, 16> in_range_since_;  ///< Per alarm bit, when its reading re-entered range
+  uint16_t last_raw_alarms_ = 0;  ///< Unmasked alarm bits from the previous poll, for rising-edge detection
 
   rclcpp::TimerBase::SharedPtr connect_timer_;  ///< Connection retry timer
   rclcpp::TimerBase::SharedPtr poll_timer_;     ///< Input polling timer
