@@ -37,7 +37,7 @@ project(${PACKAGE_NAME})  ## this package name is the name of the directory this
 
 add_compile_definitions(CMAKE_PACKAGE_NAME=${PACKAGE_NAME})
 
-# Default to C++17 for humble
+# Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
@@ -52,6 +52,10 @@ endif()
 
 foreach(DEPEND ${ROS_DEPENDS} ${EXTERNAL_DEPENDS})
   find_package(${DEPEND} REQUIRED)
+endforeach(DEPEND)
+
+foreach(DEPEND ${ROS_DEPENDS})
+  list(APPEND ROS_DEPENDS_TARGETS ${${DEPEND}_TARGETS})
 endforeach(DEPEND)
 
 
@@ -87,7 +91,7 @@ foreach(NODE_FILE ${NODES})
   message("  - " ${NODE_NAME})
   list(APPEND EXECUTABLES ${NODE_NAME})
   add_executable(${NODE_NAME} ${NODE_FILE} ${HDRS} ${SRCS})
-  ament_target_dependencies(${NODE_NAME} ${ROS_DEPENDS} )
+  target_link_libraries(${NODE_NAME} ${ROS_DEPENDS_TARGETS} )
   target_link_libraries(${NODE_NAME} ${EXTERNAL_DEPENDS_LIB})
   target_include_directories(${NODE_NAME} PRIVATE "include/${PROJECT_NAME}/")
 endforeach(NODE_FILE)
