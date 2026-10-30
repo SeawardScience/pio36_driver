@@ -42,6 +42,11 @@
     sensor_power:
       ignore_fault: false            # Set true to suppress bit 7 "Sensor power fault" when output is unloaded
 
-    
+    # Latched sensor alarms (water, CPU temperature) are cleared on the board once
+    # the reading has been back inside the board's own limits for this long. 0 disables.
+    sensor_alarms:
+      auto_clear_hold_sec: 60.0
+
+
     use_sim_time: false
 

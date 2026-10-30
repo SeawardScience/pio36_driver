@@ -82,7 +82,7 @@ The main driver node that communicates with the PIO36 board via Modbus TCP, conv
 |------------------------|---------------------------------------|-------------------------------------|
 | `~/valve_state`        | `hydraulic_interfaces::msg::ValvePack`| PWM duty cycle feedback (0-1 range)|
 | `~/analog_input_voltage`| `io_interfaces::msg::RawAnalogArray` | Analog input voltages (0-10V)      |
-| `/diagnostics`        | `diagnostic_msgs::msg::DiagnosticArray` | System warnings and sensor alarms |
+| `/diagnostics`        | `diagnostic_msgs::msg::DiagnosticArray` | System warnings and sensor alarms, with supply V/A, CPU/Pt100 temperature, alarm limits and water-probe raw ADC |
 
 #### Subscribed Topics
 
@@ -107,6 +107,7 @@ The main driver node that communicates with the PIO36 board via Modbus TCP, conv
 | `dither.duty`                      | `float`       | `0.0`                 | Global dither amplitude (0-100%)                     |
 | `dither.frequency`                 | `float`       | `0.0`                 | Global dither frequency (Hz, 0-250)                  |
 | `dither.phase`                     | `float`       | `0.0`                 | Global dither phase offset (0-360°)                 |
+| `sensor_alarms.auto_clear_hold_sec`| `float`       | `60.0`                | Clear latched water / CPU-temperature alarms once the reading has been back inside the board's limits this long (0 disables) |
 | `lost_comms_timeout`               | `int`         | `5`                   | Lost communications timeout in seconds               |
 | `deadband`                         | `float`       | `0.01`                | Minimum setpoint (0-1) before zeroing output         |
 
